@@ -67,7 +67,7 @@
  * @brief Enable (1) or disable (0) the sending of periodic heartbeat messages
  */
 #ifndef RLOG_SEND_HEARTBEAT
-    #define RLOG_SEND_HEARTBEAT 1
+    #define RLOG_SEND_HEARTBEAT 0
 #endif
 
 /**
