@@ -7,9 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2022-09-29
+
 ### Added
 - CHANGELOG.md
 - README.md
 - Source Code
 
 [Unreleased]: https://github.com/eduardodsp/rlog/releases
+[1.0.0]: https://github.com/eduardodsp/rlog/releases/tag/v1.0.0

@@ -11,6 +11,12 @@ I wrote this to help me monitor the status of devices on my other projects. Some
     - Thread safety. Multiple threads will write to the same log buffer
     - Portable, since I will be using on other projects.
 
+## Suported Platforms
+|   OS          | Target          | Status          |
+| ------------- | -------------   | -------------   |
+| FreeRTOS      | ESP32           | Supported       |
+| TBD           | TBD             | TBD             |
+
 ## How To Use
 ```
     #include "rlog.h"
@@ -35,7 +41,7 @@ The header files on [platform directory](https://github.com/eduardodsp/rlog/tree
 ```
 platform
 |
-|-- env (Operating system APIs)  
+|-- env (Operating system and middleware APIs)  
 |   |-- rlog_net.h (Network API)
 |   |-- rlog_osal.h (Operating systems abstraction layer)
 |   |-- FreeRTOS (FreeRTOS implementation)
@@ -43,7 +49,7 @@ platform
 |
 |-- target   (Hardware dependent APIs)
 |   |-- rlog_rtc.h (Real Time Clock APIs)
-|   '-- ESP32-DEVKITC (ESP32 Devkit implementation)
+|   '-- ESP32 (Generic ESP32 implementation)
 
 ```
 
