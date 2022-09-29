@@ -11,7 +11,7 @@ I wrote this to help me monitor the status of devices on my other projects. Some
     - Thread safety. Multiple threads will write to the same log buffer
     - Portable, since I will be using on other projects.
 
-## Suported Platforms
+## Supported Platforms
 |   OS          | Target          | Status          |
 | ------------- | -------------   | -------------   |
 | FreeRTOS      | ESP32           | Supported       |
