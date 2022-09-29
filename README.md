@@ -35,7 +35,7 @@ I wrote this to help me monitor the status of devices on my other projects. Some
         printf("RLOG init failed, error: %d \n", t_err);
     }
 ```
-## How to port to your platform:
+## Portability layer:
 
 The header files on [platform directory](https://github.com/eduardodsp/rlog/tree/main/platform) define the APIs that must be implemented for each target system. 
 ```
