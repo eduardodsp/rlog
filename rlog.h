@@ -12,6 +12,7 @@
 #ifndef _RLOG_H_
 #define _RLOG_H_
 
+#define RLOG_OK 0
 
 typedef enum
 {
