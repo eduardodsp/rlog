@@ -26,11 +26,14 @@
 #include <stdio.h>
 
 #include "rlog.h"
-#include "platform/env/rlog_osal.h"
-#include "platform/env/rlog_net.h"
+#include "platform/os/osal.h"
+#include "platform/os/net.h"
 
-#define _DEBUG_QUEUE_ 0
-#define _DEBUG_THREAD_ 0
+#define _DEBUG_QUEUE_ 1
+#define _DEBUG_THREAD_ 1
+
+#define RLOG_TASK_STACK_SIZE 2048
+#define RLOG_TASK_PRIO 8
 
 /**
  * @brief Enable (1) or Disable (0) timestamping of messages.
@@ -218,21 +221,18 @@ int queue_get(char* msg)
 
 int rlog_init(void)
 {
-
-    int  ierr = 0;
-
     ssts = RLOG_STS_INTIALIZING;
 
     queue_init();
 
-    ierr = osal_create_mutex((osal_mutex_t*) &smutex);
+    smutex = osal_create_mutex();
 
-    if( ierr < 0 )
+    if( smutex == NULL )
         return -1;
     
-    ierr = osal_create_thread((osal_thread_t*)&sthread, rlog_thread, NULL);
+    sthread = osal_create_thread("rlog_main_tsk", rlog_thread, NULL, RLOG_TASK_STACK_SIZE, RLOG_TASK_PRIO);
     
-    if( ierr < 0 )
+    if( sthread == NULL )
         return -2;
     
     return 0;

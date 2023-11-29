@@ -1,7 +1,7 @@
 /**
- * @file rlog_rtc.c
+ * @file rtc.h
  * @author edsp
- * @brief Real Time Clock API implementation for ESP32
+ * @brief Real Time Clock abstraction layer
  * @version 1.0.0
  * @date 2022-09-29
  * 
@@ -21,19 +21,16 @@
  * 
  */
 
-#include <esp_system.h>
-#include <time.h>
-#include <sys/time.h>
+#ifndef _RLOG_RTC_H_
+#define _RLOG_RTC_H_
 
-#include "../rlog_rtc.h"
+/**
+ * @brief Returns the date time on a C string with format
+ *        DD-MM-YYYY HH:MM:SS
+ *
+ * @param[out] sdate Output string
+ */
+void rtc_get_date(char* sdate);
 
 
-void rtc_get_date(char* sdate)
-{
-    time_t rawtime;
-    struct tm * timeinfo;
-
-    time ( &rawtime );
-    timeinfo = localtime ( &rawtime );
-    sprintf(sdate, "%02d-%02d-%d %02d:%02d:%02d",timeinfo->tm_mday, timeinfo->tm_mon + 1, timeinfo->tm_year + 1900, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
-}
+#endif /* _RLOG_RTC_H_ */
