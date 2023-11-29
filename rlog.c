@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include "dlog/dlog.h"
 #include "rlog.h"
 #include "platform/os/osal.h"
 #include "platform/os/net.h"
