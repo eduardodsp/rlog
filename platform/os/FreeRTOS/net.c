@@ -1,5 +1,5 @@
 /**
- * @file rlog_net.c
+ * @file net.c
  * @author edsp
  * @brief Network abstraction layert for FreeRTOS
  * @version 1.0.0
@@ -27,8 +27,8 @@
 #include "lwip/sockets.h"
 #include "lwip/sys.h"
 
-#include "../rlog_osal.h"
-#include "../rlog_net.h"
+#include "../osal.h"
+#include "../net.h"
 
 #ifdef DPRINTF
 #include <stdio.h>
