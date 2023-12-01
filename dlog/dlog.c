@@ -206,6 +206,7 @@ int seek_position(FILE* pfile, unsigned int line, fpos_t* pos)
 
 int dlog_get(dlog_t* ptr, char* msg, int size)
 {
+    fpos_t aux_pos;
     if(ptr == NULL)
         return DLOG_NULL_PTR;
 
@@ -215,10 +216,12 @@ int dlog_get(dlog_t* ptr, char* msg, int size)
     //set file to head position
     fsetpos(ptr->file_ptr , &ptr->head_pos );
 
-    int c,i;
-    for(i = 0; i < size; i++)
+    //save current position
+    aux_pos = ptr->head_pos;
+
+    for(int i = 0; i < size; i++)
     {
-        c = fgetc(ptr->file_ptr);
+        int c = fgetc(ptr->file_ptr);
         if( c == string_terminator ){
             msg[i] = '\0';
             break;
@@ -230,9 +233,9 @@ int dlog_get(dlog_t* ptr, char* msg, int size)
     fgetpos(ptr->file_ptr, &ptr->head_pos);
 
     #ifdef _____fpos_t_defined
-    ptr->head_pos.__pos += DLOG_LINE_MAX_SIZE - i;
+    ptr->head_pos.__pos = aux_pos.__pos + DLOG_LINE_MAX_SIZE + 1;
     #else
-    ptr->head_pos += DLOG_LINE_MAX_SIZE - i;
+    ptr->head_pos = aux_pos + DLOG_LINE_MAX_SIZE + 1;
     #endif
 
     if( ptr->qhead == 0) 
@@ -248,7 +251,7 @@ int dlog_get(dlog_t* ptr, char* msg, int size)
 
 int dlog_put(dlog_t* ptr, char* msg)
 {
-
+    fpos_t aux_pos;
     unsigned char full = 0;
 
     if( ptr == NULL )
@@ -267,6 +270,9 @@ int dlog_put(dlog_t* ptr, char* msg)
 
     // set file position to tail
     fsetpos (ptr->file_ptr , &ptr->tail_pos );
+
+    //save current position
+    aux_pos = ptr->tail_pos;
 
     // insert new message
     fputs (msg, ptr->file_ptr);
@@ -299,9 +305,9 @@ int dlog_put(dlog_t* ptr, char* msg)
     fgetpos(ptr->file_ptr, &ptr->tail_pos);
 
     #ifdef _____fpos_t_defined
-    ptr->tail_pos.__pos += DLOG_LINE_MAX_SIZE - size;
+    ptr->tail_pos.__pos = aux_pos.__pos + DLOG_LINE_MAX_SIZE + 1;
     #else
-    ptr->tail_pos += DLOG_LINE_MAX_SIZE - size;
+    ptr->tail_pos = aux_pos + DLOG_LINE_MAX_SIZE + 1;
     #endif    
 
     if ( ptr->en_auto_clr )

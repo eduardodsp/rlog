@@ -30,12 +30,15 @@
 #include "platform/os/osal.h"
 #include "platform/os/net.h"
 
-#define _DEBUG_QUEUE_ 1
-#define _DEBUG_THREAD_ 1
+#define _DEBUG_QUEUE_ 0
+#define _DEBUG_THREAD_ 0
 
 #define RLOG_TASK_STACK_SIZE 2048
 #define RLOG_TASK_PRIO 8
 
+#ifndef RLOG_DISK_LOG_ENABLE
+    #define RLOG_DISK_LOG_ENABLE 1
+#endif
 /**
  * @brief Enable (1) or Disable (0) timestamping of messages.
  */
@@ -47,7 +50,7 @@
  * @brief User defined maximum size of log messages.
  */
 #ifndef RLOG_MAX_SIZE_CHAR
-    #define RLOG_MAX_SIZE_CHAR  100
+    #define RLOG_MAX_SIZE_CHAR  80
 #endif
 
 /**
@@ -71,7 +74,7 @@
  * @brief Enable (1) or disable (0) the sending of periodic heartbeat messages
  */
 #ifndef RLOG_SEND_HEARTBEAT
-    #define RLOG_SEND_HEARTBEAT 0
+    #define RLOG_SEND_HEARTBEAT 1
 #endif
 
 /**
@@ -91,6 +94,9 @@
 #define MSG_MAX_SIZE_CHAR (RLOG_MAX_SIZE_CHAR + 40) //includes date, tags and termination character
 #define MSG_QUEUE_SIZE RLOG_MSG_QUEUE_SIZE
 
+#define EVENT_NEW_CONNECTION    ( 1 << 0 )
+#define EVENT_NEW_MSG           ( 1 << 1 )
+#define EVENTS_MASK             ( EVENT_NEW_CONNECTION | EVENT_NEW_MSG )
 
 typedef char msg_t[MSG_MAX_SIZE_CHAR];
 
@@ -132,12 +138,20 @@ static int  shtb_tmr = 0;
 /**
  * @brief server thread handle
  */
-static osal_thread_t* sthread;
+static osal_thread_t* main_task_handle;
+static osal_thread_t* tcp_task_handle;
 
 /**
  * @brief mutual exclusion semaphore
  */
 static osal_mutex_t*  smutex;
+
+static osal_sem_t* lost_conn_sema;
+static osal_event_t* wakeup_events;
+
+#if RLOG_DISK_LOG_ENABLE
+static dlog_t logfile;
+#endif
 
 /**
  * @brief Initializes the queue
@@ -159,6 +173,7 @@ static void  queue_put(char* msg);
 static int  queue_get(char* msg);
 
 void rlog_thread(void* arg);
+void rlog_tcp_thread(void* arg);
 
 void queue_init(void)
 {
@@ -227,15 +242,26 @@ int rlog_init(void)
     queue_init();
 
     smutex = osal_create_mutex();
-
     if( smutex == NULL )
         return -1;
-    
-    sthread = osal_create_thread("rlog_main_tsk", rlog_thread, NULL, RLOG_TASK_STACK_SIZE, RLOG_TASK_PRIO);
-    
-    if( sthread == NULL )
+
+    lost_conn_sema = osal_sem_create(1, 0);
+    if( lost_conn_sema == NULL )
         return -2;
+
+    wakeup_events = osal_create_event();        
+
+    main_task_handle = osal_create_thread("rlog_main_tsk", rlog_thread, NULL, RLOG_TASK_STACK_SIZE, RLOG_TASK_PRIO);
+    if( main_task_handle == NULL )
+        return -3;
     
+    tcp_task_handle = osal_create_thread("rlog_tcp_tsk", rlog_tcp_thread, NULL, RLOG_TASK_STACK_SIZE, RLOG_TASK_PRIO);
+    if( tcp_task_handle == NULL )
+        return -4;
+
+#if RLOG_DISK_LOG_ENABLE
+    dlog_open(&logfile, "/spiffs/rlog_teste", 20);
+#endif
     return 0;
 }
 
@@ -279,6 +305,7 @@ int rlog(char* tag, rlog_type_e type, char* msg)
         return -4;
 
     queue_put(log);
+    osal_event_set(wakeup_events, EVENT_NEW_MSG);
     return 0;
 }
 
@@ -298,60 +325,114 @@ rlog_server_stats_t rlog_get_stats(void)
 
 #define SERVER_BANNER "RLOG Server v"RLOG_VERSION " up and running!"
 
-void rlog_thread(void* arg)
-{    
-    int conn = 0;
-    int ierr = 0;
-    
-    ssts = RLOG_STS_RUNNING;
-
-    ierr = net_init();
-
-    if ( ierr < 0 )
-    {
-#if _DEBUG_THREAD_        
-        printf("rlog_thread net_init err: %d \n", ierr);
-#endif        
-        ssts = RLOG_STS_DEAD;
-        return;
-    }
-    
-    rlog("RLOG",RLOG_INFO, SERVER_BANNER);
-        
-    while(1)
-    { 
-                      
-        ierr = net_wait_conn();
-        if( ierr < 0 )
-        {
-        	osal_sleep(THREAD_PERIOD_US);
-        	continue;
-        }
-        
-        conn = 1;
-        while( conn )
-        {
-        	//dispatch all enqueued log messages
-            while( queue_get(stx) )
-            {
-            	if( net_send(stx,strlen(stx)) < 0 )
-            	{
-                    rlog("RLOG",RLOG_WARNING,"Lost connection");
-                    conn = 0;
-                    break;
-            	}
-            	 osal_sleep(QUEUE_POLLING_PERIOD_US);
-            }
 
 #if RLOG_SEND_HEARTBEAT
-            if( shtb_tmr > HEARTBEAT_PERIOD_TICKS )
-            {
+    #define EVENT_TIMEOUT 10
+#else
+    #define EVENT_TIMEOUT OSAL_WAIT_FOREVER
+#endif
+
+void rlog_thread(void* arg)
+{                
+    uint32_t evts = 0; 
+    unsigned int state = 0;
+
+    while(1)
+    { 
+        evts = osal_event_wait(wakeup_events, EVENTS_MASK, EVENT_TIMEOUT);
+        osal_event_clr(wakeup_events, evts);
+
+        if( !evts )
+        {
+            shtb_tmr++;
+            if( shtb_tmr > HEARTBEAT_PERIOD_TICKS ) {
                 rlog("RLOG",RLOG_INFO,"Heartbeat");
                 shtb_tmr = 0;
             }
-            shtb_tmr++;
-#endif
-            osal_sleep(THREAD_PERIOD_US);
-        }        
+        }
+
+        if( evts & EVENT_NEW_CONNECTION )
+        {
+            state = 2;
+            
+#if RLOG_DISK_LOG_ENABLE
+            // dump all messages from dlog to rlog-cli
+            while( dlog_get(&logfile, stx, sizeof(stx)) == DLOG_OK )
+            {
+                if( net_send(stx,strlen(stx)) < 0 )
+                {
+                    rlog("RLOG",RLOG_WARNING,"Lost connection");
+                    osal_sem_signal(lost_conn_sema);
+                    state = 1;
+                    break;
+                }
+                osal_sleep(QUEUE_POLLING_PERIOD_US);
+            }
+#endif            
+        } 
+
+        if( evts & EVENT_NEW_MSG )
+        {
+            switch(state)
+            {
+                case 0: // init
+                    rlog("RLOG",RLOG_INFO, SERVER_BANNER);
+                    state = 1;
+                break;
+                case 1: // disconected
+                {
+                    osal_sem_signal(lost_conn_sema);
+#if RLOG_DISK_LOG_ENABLE                                     
+                    while( queue_get(stx) )
+                    {
+                        dlog_put(&logfile, stx);    
+                        osal_sleep(QUEUE_POLLING_PERIOD_US);
+                    }
+#endif                    
+                }
+                break;
+                case 2: // conected
+                {
+                    //dispatch all enqueued log messages
+                    while( queue_get(stx) )
+                    {
+                        if( net_send(stx,strlen(stx)) < 0 )
+                        {
+                            rlog("RLOG",RLOG_WARNING,"Lost connection");
+                            osal_sem_signal(lost_conn_sema);
+                            state = 1;
+                            break;
+                        }
+                        osal_sleep(QUEUE_POLLING_PERIOD_US);
+                    }
+                }
+                break;
+            }    
+        } 
     }    
+}
+
+void rlog_tcp_thread(void* arg)
+{
+    
+    if ( net_init() < 0)
+    {
+#if _DEBUG_THREAD_        
+        printf("rlog_tcp_thread net_init failed\n");
+#endif        
+        return;
+    }
+            
+    while(1)
+    {                       
+        if ( net_wait_conn() >= 0) 
+        {
+            osal_event_set(wakeup_events, EVENT_NEW_CONNECTION);
+            osal_sem_wait(lost_conn_sema, OSAL_WAIT_FOREVER);
+        }
+        else
+        {
+            osal_sleep(10 * 1000 /*10ms*/);
+        }
+    }
 }

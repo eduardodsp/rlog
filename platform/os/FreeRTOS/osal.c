@@ -61,49 +61,46 @@ osal_thread_t* osal_create_thread(
     if (xTaskCreate ((TaskFunction_t)task, NULL, stacksize, arg, prio, &hTask) != 1)
     	return NULL;
 #else
-    if (xTaskCreate ((TaskFunction_t)task, NULL, stack, arg, prio, &hTask) != 1)
+    if (xTaskCreate((TaskFunction_t)task, NULL, stack, arg, prio, &hTask) != 1)
     	return NULL;
 #endif
 
     return (osal_thread_t*)hTask;
 }
 
-int osal_destroy_thread(osal_thread_t* id)
+void osal_destroy_thread(osal_thread_t* id)
 {
-    return 0;
+    vTaskDelete( id );
 }
 
 osal_mutex_t * osal_create_mutex()
 {
 	SemaphoreHandle_t xMutex = NULL;
 	xMutex = xSemaphoreCreateRecursiveMutex();
+    OSAL_ASSERT(xMutex != NULL);
     return (osal_mutex_t*)xMutex;
 }
 
-int osal_destroy_mutex(osal_mutex_t* lock)
+void osal_destroy_mutex(osal_mutex_t* lock)
 {
-    if(lock == NULL)
-        return -1;
-
-    vSemaphoreDelete ((SemaphoreHandle_t)lock);
-
-    return 0;
+    OSAL_ASSERT(lock != NULL);
+    vSemaphoreDelete((SemaphoreHandle_t)lock);
 }
 
-int osal_lock_mutex(osal_mutex_t* lock)
+bool osal_lock_mutex(osal_mutex_t* lock)
 {
-    if (xSemaphoreTakeRecursive ((SemaphoreHandle_t)lock, portMAX_DELAY) != 1)
-        return -1;
+    if (xSemaphoreTakeRecursive((SemaphoreHandle_t)lock, portMAX_DELAY) != 1)
+        return false;
 
-    return 0;
+    return true;
 }
 
-int osal_unlock_mutex(osal_mutex_t* lock)
+bool osal_unlock_mutex(osal_mutex_t* lock)
 {
-     if (xSemaphoreGiveRecursive ((SemaphoreHandle_t)lock) != 1) {
-    	 return -1;
+     if (xSemaphoreGiveRecursive((SemaphoreHandle_t)lock) != 1) {
+    	 return false;
      }
-    return 0;
+    return true;
 }
 
 /**
@@ -113,38 +110,31 @@ int osal_unlock_mutex(osal_mutex_t* lock)
 osal_event_t* osal_create_event()
 {
     EventGroupHandle_t handle = xEventGroupCreate();
+    OSAL_ASSERT(handle != NULL);
     return (osal_event_t *)handle;
 }
 
-bool osal_event_wait (osal_event_t * event, uint32_t mask, uint32_t * value, uint32_t time)
+uint32_t osal_event_wait(osal_event_t * event, uint32_t mask, uint32_t time)
 {
-   *value = xEventGroupWaitBits (
-      (EventGroupHandle_t)event,
-      mask,
-      pdFALSE,
-      pdFALSE,
-      TIME_TO_TICKS (time));
-
-   *value &= mask;
-   return *value == 0;
+   return xEventGroupWaitBits((EventGroupHandle_t)event, mask, pdFALSE, pdFALSE, TIME_TO_TICKS (time));
 }
 
-void osal_event_set (osal_event_t * event, uint32_t value)
+void osal_event_set(osal_event_t * event, uint32_t value)
 {
    xEventGroupSetBits ((EventGroupHandle_t)event, value);
 }
 
-void osal_event_clr (osal_event_t * event, uint32_t value)
+void osal_event_clr(osal_event_t * event, uint32_t value)
 {
-   xEventGroupClearBits ((EventGroupHandle_t)event, value);
+   xEventGroupClearBits((EventGroupHandle_t)event, value);
 }
 
-void osal_event_destroy (osal_event_t * event)
+void osal_event_destroy(osal_event_t * event)
 {
-   vEventGroupDelete ((EventGroupHandle_t)event);
+   vEventGroupDelete((EventGroupHandle_t)event);
 }
 
-static void timer_callback (TimerHandle_t xTimer)
+static void timer_callback(TimerHandle_t xTimer)
 {
    aux_timer_t * timer = (aux_timer_t *)pvTimerGetTimerID (xTimer);
 
@@ -162,8 +152,7 @@ osal_timer_t* osal_timer_create(
     aux_timer_t * timer;
 
     timer = malloc (sizeof (aux_timer_t));
-    if(timer == NULL)
-        return NULL;
+    OSAL_ASSERT(timer != NULL);
 
     timer->fn  = fn;
     timer->arg = arg;
@@ -174,30 +163,56 @@ osal_timer_t* osal_timer_create(
                                 timer,
                                 timer_callback);
 
-    if(timer->handle == NULL)
-        return NULL;
-
+    OSAL_ASSERT(timer != NULL);
     return (osal_timer_t *)timer;
 }
 
-void osal_timer_start (osal_timer_t * timer)
+void osal_timer_start(osal_timer_t * timer)
 {
     aux_timer_t* tmp = (aux_timer_t*)timer;
     xTimerStart(tmp->handle, 0);
 }
 
-void osal_timer_stop (osal_timer_t * timer)
+void osal_timer_stop(osal_timer_t * timer)
 {
     aux_timer_t* tmp = (aux_timer_t*)timer;
-    xTimerStop (tmp->handle, portMAX_DELAY);
+    xTimerStop(tmp->handle, portMAX_DELAY);
 }
 
-void osal_timer_destroy (osal_timer_t * timer)
+void osal_timer_destroy(osal_timer_t * timer)
 {
     aux_timer_t* tmp = (aux_timer_t*)timer;
 
-    xTimerDelete (tmp->handle, portMAX_DELAY);
+    xTimerDelete(tmp->handle, portMAX_DELAY);
     free (timer);
+}
+
+osal_sem_t * osal_sem_create (size_t max, size_t count)
+{
+   SemaphoreHandle_t handle = xSemaphoreCreateCounting (max, count);
+   return (osal_sem_t *)handle;
+}
+
+bool osal_sem_wait(osal_sem_t * sem, uint32_t time)
+{
+   if (xSemaphoreTake((SemaphoreHandle_t)sem, TIME_TO_TICKS(time)) == pdTRUE)
+   {
+      /* Did not timeout */
+      return true;
+   }
+
+   /* Timed out */
+   return false;
+}
+
+void osal_sem_signal(osal_sem_t * sem)
+{
+   xSemaphoreGive((SemaphoreHandle_t)sem);
+}
+
+void osal_sem_destroy(osal_sem_t * sem)
+{
+   vSemaphoreDelete((SemaphoreHandle_t)sem);
 }
 
 void osal_get_date(char* buffer)

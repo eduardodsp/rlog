@@ -26,12 +26,20 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#if 1
+    #include <assert.h>
+    #define OSAL_ASSERT(exp) assert (exp)
+#else
+    #define OSAL_ASSERT(exp)    
+#endif
+
 #define OSAL_WAIT_FOREVER 0xFFFFFFFF
 
 typedef void osal_thread_t;
 typedef void osal_mutex_t;
 typedef void osal_event_t;
 typedef void osal_timer_t;
+typedef void osal_sem_t;
 
 /**
  * @brief Create a thread.
@@ -55,9 +63,8 @@ osal_thread_t* osal_create_thread(
  * @brief Destroy a thread
  * 
  * @param id Pointer to thread handle
- * @return 0 on success, negative number on failure
  */
-int osal_destroy_thread(osal_thread_t* id);
+void osal_destroy_thread(osal_thread_t* id);
 
 /**
  * @brief Create waitable event
@@ -70,16 +77,10 @@ osal_event_t* osal_create_event(void);
  * 
  * @param evt Event handle
  * @param mask Event bits to wait
- * @param value Event value. Test value to know which event bits were set
  * @param time Timeout in miliseconds
- * @return true.. 
+ * @return Test value to know which event bits were set
  */
-bool osal_event_wait(
-                    osal_event_t * event, 
-                    uint32_t mask,
-                    uint32_t * value,
-                    uint32_t time
-                    );
+uint32_t osal_event_wait(osal_event_t * event, uint32_t mask, uint32_t time);
 
 /**
  * @brief Set an event bit
@@ -145,25 +146,59 @@ osal_mutex_t* osal_create_mutex(void);
  * @brief Destroy mutex
  * 
  * @param lock Pointer to mutex handle
- * @return int 0 if sucessful, negative if fail
  */
-int osal_destroy_mutex(osal_mutex_t* lock);
+void osal_destroy_mutex(osal_mutex_t* lock);
 
 /**
  * @brief Suspend calling thread until mutex is acquired.
  * 
  * @param lock Pointer to mutex handle
- * @return 0 on success, negative number on failure
+ * @return true if mutex was acquired
+ * @return false in case of error
  */
-int osal_lock_mutex(osal_mutex_t* lock);
+bool osal_lock_mutex(osal_mutex_t* lock);
 
 /**
  * @brief Release a mutex.
  * 
  * @param lock Pointer to mutex handle
- * @return 0 on success, negative number on failure
+ * @return true if mutex was released
+ * @return false in case of error
  */
-int osal_unlock_mutex(osal_mutex_t* lock);
+bool osal_unlock_mutex(osal_mutex_t* lock);
+
+/**
+ * @brief Create a counting semaphore.
+ * 
+ * @param max Sempahore max count
+ * @param count Initial count
+ * @return Semaphore handle
+ */
+osal_sem_t * osal_sem_create(size_t max, size_t count);
+
+/**
+ * @brief Wait for a semaphore until timeout
+ * 
+ * @param sem Semaphore handle
+ * @param time Timeout in miliseconds
+ * @return true if semaphore was acquired
+ * @return false if timeout expired
+ */
+bool osal_sem_wait (osal_sem_t * sem, uint32_t time);
+
+/**
+ * @brief Signal a semaphore
+ * 
+ * @param sem Semaphore handle
+ */
+void osal_sem_signal (osal_sem_t * sem);
+
+/**
+ * @brief Destroy a semaphore
+ * 
+ * @param sem Semaphore handle
+ */
+void osal_sem_destroy (osal_sem_t * sem);
 
 /**
  * @brief Returns the date time on a C string with format 

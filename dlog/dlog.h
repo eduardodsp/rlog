@@ -7,7 +7,7 @@
 #include <sys/stat.h>
 
 #define DLOG_NAME_MAX_SIZE 25
-#define DLOG_LINE_MAX_SIZE 80
+#define DLOG_LINE_MAX_SIZE 100
 
 /**
  * @brief Enable/Disable automatic clean up after writing a new line.
