@@ -42,11 +42,8 @@
     #define RLOG_TIMESTAMP_ENABLE 1
 #endif
 
-/**
- * @brief Maximum number of log file entries
- */
-#ifndef RLOG_FILE_MAX_NUM_ENTRIES
-    #define RLOG_FILE_MAX_NUM_ENTRIES 40
+#ifndef RLOG_DLOG_ENABLE
+    #define RLOG_DLOG_ENABLE 1
 #endif
 
 /**
@@ -98,9 +95,13 @@ typedef struct rlog_server_stats_t
 
 /**
  * @brief Initializes rlog server.
- * @return 0 on success, negative number on failure.
+ * @param filepath Fullpath for backup file, including filename. Only used if
+ * RLOG_DLOG_ENABLE is set to 1, else it is ignored
+ * @param size Size of backup file in number of message entries. Only used if
+ * RLOG_DLOG_ENABLE is set to 1, else it is ignored
+ * @return RLOG_OK on success, negative number on failure.
  */
-int rlog_init(void);
+int rlog_init(const char* filepath, unsigned int size);
 
 /**
  * @brief Insert a log message into the queue
