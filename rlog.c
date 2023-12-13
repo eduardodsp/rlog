@@ -326,7 +326,7 @@ int rlog_init(void)
     }
 
 #if RLOG_DLOG_ENABLE
-    if( dlog_open(&logger, "/spiffs/rlog", 40) != DLOG_OK ) {
+    if( dlog_open(&logger, "/spiffs/rlog", RLOG_FILE_MAX_NUM_ENTRIES) != DLOG_OK ) {
         err = -5;
         goto INIT_FAIL;            
     }

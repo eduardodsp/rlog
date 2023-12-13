@@ -6,8 +6,26 @@
 #include <sys/unistd.h>
 #include <sys/stat.h>
 
-#define DLOG_NAME_MAX_SIZE 25
-#define DLOG_LINE_MAX_SIZE 100
+/**
+ * @brief Max size of file name in number of characters
+*/
+#ifndef DLOG_NAME_MAX_SIZE
+    #define DLOG_NAME_MAX_SIZE 25
+#endif
+
+/**
+ * @brief Max size of log entries in number of characters
+*/
+#ifndef DLOG_LINE_MAX_SIZE
+    #define DLOG_LINE_MAX_SIZE 100
+#endif
+
+/**
+ * @brief Enable/Disable automatic resizing of persitence file
+*/
+#ifndef DLOG_ENABLE_RESIZING
+    #define DLOG_ENABLE_RESIZING 1
+#endif
 
 /**
  * @brief Enable/Disable automatic clean up after writing a new line.
@@ -127,7 +145,7 @@ int dlog_read_test(dlog_t* ptr, unsigned int n);
 /**
  * @brief Close the log file and reset control block
  * @param ptr Pointer to the log file control block
- * @return DLOG_ERR_CODESNGFILE_ERR_CODES
+ * @return DLOG_ERR_CODES
  */
 int dlog_close(dlog_t* ptr);
 

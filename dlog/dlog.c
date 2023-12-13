@@ -4,10 +4,11 @@
 #define DLOG_COUNT_LINE 1
 #define DLOG_TAIL_LINE  2
 #define DLOG_HEAD_LINE  3
+#define DLOG_FENCE_LINE 4
 
 #define DLOG_FIRST_ENTRY_LINE 5
 
-#define DLOG_FULL_LINE_SIZE (DLOG_LINE_MAX_SIZE + 1)
+#define DLOG_FULL_LINE_SIZE (DLOG_LINE_MAX_SIZE + 1) //entry size + newline character
 #ifdef _____fpos_t_defined
 #define UPDATE_QUEUE_POS(pos, index)  pos.__pos = ptr->log_begin_pos.__pos + ( index * DLOG_FULL_LINE_SIZE );
 #else
@@ -20,10 +21,11 @@ static char string_terminator = ';';
 static char alignment_character = '.';
 
 static int open_log_file(dlog_t* ptr);
-static int create_log_file(dlog_t* ptr);
+static int create_log_file(dlog_t* ptr, unsigned int size);
 static int read_header(dlog_t* ptr);
-static int update_header(dlog_t* ptr);
-static int seek_position(FILE* pfile, unsigned int line, fpos_t* pos);
+static void update_header(dlog_t* ptr);
+static void seek_position(FILE* pfile, unsigned int line, fpos_t* pos);
+static void fill_empty_entries(FILE* pfile, unsigned int start, unsigned int n);
 
 int dlog_open(dlog_t* ptr, char* filename, unsigned int size)
 {
@@ -31,10 +33,6 @@ int dlog_open(dlog_t* ptr, char* filename, unsigned int size)
         return DLOG_NULL_PTR;
 
     memset(ptr, 0, sizeof(dlog_t));
-    ptr->qcount = 0;
-    ptr->qtail = 0;
-    ptr->qhead = 0;
-    ptr->qsize = size;
     dlog_set_opt(ptr, DLOG_OPT_DEFAULT_ON, 1);
 
     if(size == 0)
@@ -58,7 +56,7 @@ int dlog_open(dlog_t* ptr, char* filename, unsigned int size)
 
     if( !open_log_file(ptr) ) 
     {
-        if( !create_log_file(ptr) )
+        if( !create_log_file(ptr, size) )
             return DLOG_FILESYSTEM_ERR;
     }
 
@@ -79,13 +77,24 @@ int dlog_open(dlog_t* ptr, char* filename, unsigned int size)
     if( !read_header(ptr) )
         return DLOG_INTERNAL_ERR;
 
+#if DLOG_ENABLE_RESIZING
+    // If the file already exists and has a different size we must resize it.
+    // notice that we only do this if we are increasing the size of the file,
+    // we are not allowed to reduce the file so not to lose anything stored.
+    if( ptr->qsize < size )
+    {
+        fill_empty_entries(ptr->file_ptr, DLOG_FIRST_ENTRY_LINE + ptr->qsize, size - ptr->qsize);
+        ptr->qsize = size;
+        update_header(ptr);
+    }
+#endif
+
     //set the log begin position
     seek_position(ptr->file_ptr, DLOG_FIRST_ENTRY_LINE, &ptr->log_begin_pos);
 
     //set the tail and head position
     UPDATE_QUEUE_POS(ptr->tail_pos, ptr->qtail);
     UPDATE_QUEUE_POS(ptr->head_pos, ptr->qhead);
-
 
     return DLOG_OK;
 }
@@ -102,6 +111,7 @@ int dlog_set_opt(dlog_t* ptr, unsigned char opt, unsigned char value)
     return DLOG_OK;
 }
 
+static
 int read_header(dlog_t* ptr)
 {
 
@@ -133,7 +143,8 @@ int read_header(dlog_t* ptr)
     return 1;
 }
 
-int update_header(dlog_t* ptr)
+static
+void update_header(dlog_t* ptr)
 {
 	rewind(ptr->file_ptr);
 
@@ -148,10 +159,9 @@ int update_header(dlog_t* ptr)
 
     fsetpos(ptr->file_ptr, &ptr->header_head_pos);
 	fprintf(ptr->file_ptr, "head: %010u\n", ptr->qhead);
-
-    return 1;
 }
 
+static
 int open_log_file(dlog_t* ptr)
 {
     //check if file exists
@@ -175,38 +185,54 @@ int open_log_file(dlog_t* ptr)
     return 1;
 }
 
-
-int create_log_file(dlog_t* ptr)
+static
+int create_log_file(dlog_t* ptr, unsigned int size)
 {
     //try to create a file
     ptr->file_ptr = fopen(ptr->filename, "w+");
     if ( ptr->file_ptr == NULL )
         return 0;
 
+    ptr->qcount = 0;
+    ptr->qtail = 0;
+    ptr->qhead = 0;
+    
     // fill the header block
-	fprintf(ptr->file_ptr, "size: %010u\n", ptr->qsize);
+	fprintf(ptr->file_ptr, "size: %010u\n", size);
 	fprintf(ptr->file_ptr, "count: %010u\n", ptr->qcount);
 	fprintf(ptr->file_ptr, "tail: %010u\n", ptr->qtail);
 	fprintf(ptr->file_ptr, "head: %010u\n", ptr->qhead);
 	fprintf(ptr->file_ptr, "########### LOG BEGIN #############\n");
 
     // fill the log file with empty messages for alignment
-    for(int j=0; j < ptr->qsize; j++) 
-    {        
-        for(int i=0; i < DLOG_LINE_MAX_SIZE; i++) 
-            fputc(alignment_character, ptr->file_ptr);
-
-        fputc('\n', ptr->file_ptr);     
-    }
+    fill_empty_entries(ptr->file_ptr, DLOG_FIRST_ENTRY_LINE, size);
     return 1;
 }
+
+static 
+void fill_empty_entries(FILE* pfile, unsigned int start, unsigned int n)
+{
+    fpos_t pos;
+    seek_position(pfile, start, &pos);
+    
+    // fill the log file with empty messages for alignment
+    for(int j=0; j < n; j++) 
+    {        
+        for(int i=0; i < DLOG_LINE_MAX_SIZE; i++) 
+            fputc(alignment_character, pfile);
+
+        fputc('\n', pfile);     
+    }
+}
+
 
 /**
  * @brief Find the file position according to the line. Each line is a string
  * followed by a newline character, so we must loop through the file counting
  * how many newline characters we find. This is very slow, so we should not overuse it.
 */
-int seek_position(FILE* pfile, unsigned int line, fpos_t* pos)
+static
+void seek_position(FILE* pfile, unsigned int line, fpos_t* pos)
 {
     char c;
     rewind(pfile);
@@ -216,7 +242,6 @@ int seek_position(FILE* pfile, unsigned int line, fpos_t* pos)
     }
 
     fgetpos(pfile, pos);
-    return 1;
 }
 
 int dlog_get(dlog_t* ptr, char* msg, int size)
@@ -245,9 +270,7 @@ int dlog_get(dlog_t* ptr, char* msg, int size)
 
     ptr->qcount--;
 
-    if( !update_header(ptr) )   
-        return DLOG_INTERNAL_ERR;
-
+    update_header(ptr);   
     return DLOG_OK;
 }
 
@@ -298,8 +321,7 @@ int dlog_put(dlog_t* ptr, char* msg)
     if( ptr->qcount < ptr->qsize )
         ptr->qcount++;
 
-    if( !update_header(ptr) )   
-        return DLOG_INTERNAL_ERR;
+    update_header(ptr);
 
     fflush(ptr->file_ptr);
 

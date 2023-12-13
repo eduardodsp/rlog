@@ -43,6 +43,13 @@
 #endif
 
 /**
+ * @brief Maximum number of log file entries
+ */
+#ifndef RLOG_FILE_MAX_NUM_ENTRIES
+    #define RLOG_FILE_MAX_NUM_ENTRIES 40
+#endif
+
+/**
  * @brief API success return 
  */
 #define RLOG_OK 0
