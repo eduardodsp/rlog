@@ -20,26 +20,26 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  * 
  */
-#ifndef _RLOG_OSAL_H_
-#define _RLOG_OSAL_H_
+#ifndef _OSAL_H_
+#define _OSAL_H_
 
 #include <stdbool.h>
 #include <stdint.h>
 
 #if 1
     #include <assert.h>
-    #define OSAL_ASSERT(exp) assert (exp)
+    #define OS_ASSERT(exp) assert (exp)
 #else
-    #define OSAL_ASSERT(exp)    
+    #define OS_ASSERT(exp)    
 #endif
 
-#define OSAL_WAIT_FOREVER 0xFFFFFFFF
+#define OS_WAIT_FOREVER 0xFFFFFFFF
 
-typedef void osal_thread_t;
-typedef void osal_mutex_t;
-typedef void osal_event_t;
-typedef void osal_timer_t;
-typedef void osal_sem_t;
+typedef void os_thread_t;
+typedef void os_mutex_t;
+typedef void os_event_t;
+typedef void os_timer_t;
+typedef void os_sem_t;
 
 /**
  * @brief Create a thread.
@@ -51,7 +51,7 @@ typedef void osal_sem_t;
  * @param prio Thread priority
  * @return Pointer to thread handle
  */
-osal_thread_t* osal_create_thread(
+os_thread_t* os_thread_create(
                                 const char * name, 
                                 void (*task)(void*), 
                                 void* arg, 
@@ -64,13 +64,13 @@ osal_thread_t* osal_create_thread(
  * 
  * @param id Pointer to thread handle
  */
-void osal_destroy_thread(osal_thread_t* id);
+void os_thread_destroy(os_thread_t* id);
 
 /**
  * @brief Create waitable event
  * @return Pointer to event handle
  */
-osal_event_t* osal_create_event(void);
+os_event_t* os_event_create(void);
 
 /**
  * @brief Wait for one or more event bits to be set.
@@ -80,27 +80,27 @@ osal_event_t* osal_create_event(void);
  * @param time Timeout in miliseconds
  * @return Test value to know which event bits were set
  */
-uint32_t osal_event_wait(osal_event_t * event, uint32_t mask, uint32_t time);
+uint32_t os_event_wait(os_event_t * event, uint32_t mask, uint32_t time);
 
 /**
  * @brief Set an event bit
  * @param evt Event handle
  * @param value Bits to set
  */
-void osal_event_set(osal_event_t * event, uint32_t value);
+void os_event_set(os_event_t * event, uint32_t value);
 
 /**
  * @brief Clear an event bit
  * @param evt Event handle
  * @param value Bits to clear
  */
-void osal_event_clr(osal_event_t * event, uint32_t value);
+void os_event_clear(os_event_t * event, uint32_t value);
 
 /**
  * @brief Destroy event object
  * @param evt Event handle
  */
-void osal_event_destroy(osal_event_t * event);
+void os_event_destroy(os_event_t * event);
 
 /**
  * @brief Create a timer
@@ -110,9 +110,9 @@ void osal_event_destroy(osal_event_t * event);
  * @param oneshot Enable or disable oneshot mode
  * @return Pointer to timer handle
  */
-osal_timer_t * osal_timer_create(
+os_timer_t * os_timer_create(
                                 uint32_t us,
-                                void (*fn) (osal_timer_t * timer, void * arg),
+                                void (*fn) (os_timer_t * timer, void * arg),
                                 void * arg,
                                 bool oneshot
                                 );
@@ -121,33 +121,33 @@ osal_timer_t * osal_timer_create(
  * @brief Start a timer
  * @param timer Timer handle
  */
-void osal_timer_start(osal_timer_t * timer);
+void os_timer_start(os_timer_t * timer);
 
 /**
  * @brief Stop a timer
  * @param timer Timer handle
  */
-void osal_timer_stop(osal_timer_t * timer);
+void os_timer_stop(os_timer_t * timer);
 
 /**
  * @brief Destroy a timer
  * @param timer Timer handle
  */
-void osal_timer_destroy(osal_timer_t * timer);
+void os_timer_destroy(os_timer_t * timer);
 
 
 /**
  * @brief Create a mutual exclusion semaphore (mutex)
  * @return Pointer to mutex handle
  */
-osal_mutex_t* osal_create_mutex(void);
+os_mutex_t* os_mutex_create(void);
 
 /**
  * @brief Destroy mutex
  * 
  * @param lock Pointer to mutex handle
  */
-void osal_destroy_mutex(osal_mutex_t* lock);
+void os_mutex_destroy(os_mutex_t* lock);
 
 /**
  * @brief Suspend calling thread until mutex is acquired.
@@ -156,7 +156,7 @@ void osal_destroy_mutex(osal_mutex_t* lock);
  * @return true if mutex was acquired
  * @return false in case of error
  */
-bool osal_lock_mutex(osal_mutex_t* lock);
+bool os_mutex_lock(os_mutex_t* lock);
 
 /**
  * @brief Release a mutex.
@@ -165,7 +165,7 @@ bool osal_lock_mutex(osal_mutex_t* lock);
  * @return true if mutex was released
  * @return false in case of error
  */
-bool osal_unlock_mutex(osal_mutex_t* lock);
+bool os_mutex_unlock(os_mutex_t* lock);
 
 /**
  * @brief Create a counting semaphore.
@@ -174,7 +174,7 @@ bool osal_unlock_mutex(osal_mutex_t* lock);
  * @param count Initial count
  * @return Semaphore handle
  */
-osal_sem_t * osal_sem_create(size_t max, size_t count);
+os_sem_t * os_sem_create(size_t max, size_t count);
 
 /**
  * @brief Wait for a semaphore until timeout
@@ -184,21 +184,21 @@ osal_sem_t * osal_sem_create(size_t max, size_t count);
  * @return true if semaphore was acquired
  * @return false if timeout expired
  */
-bool osal_sem_wait (osal_sem_t * sem, uint32_t time);
+bool os_sem_wait (os_sem_t * sem, uint32_t time);
 
 /**
  * @brief Signal a semaphore
  * 
  * @param sem Semaphore handle
  */
-void osal_sem_signal (osal_sem_t * sem);
+void os_sem_signal (os_sem_t * sem);
 
 /**
  * @brief Destroy a semaphore
  * 
  * @param sem Semaphore handle
  */
-void osal_sem_destroy (osal_sem_t * sem);
+void os_sem_destroy (os_sem_t * sem);
 
 /**
  * @brief Returns the date time on a C string with format 
@@ -206,13 +206,13 @@ void osal_sem_destroy (osal_sem_t * sem);
  * 
  * @param[out] buffer Output string
  */
-void osal_get_date(char* buffer);
+void os_get_date(char* buffer);
 
 /**
  * @brief Suspend execution for microsecond intervals
  * 
  * @param t time in microseconds
  */
-void osal_sleep(uint32_t t);
+void os_sleep_us(uint32_t t);
 
-#endif //_RLOG_OSAL_H_
+#endif //_OSAL_H_

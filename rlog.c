@@ -136,28 +136,28 @@ static int  heartbeat_timer = 0;
 /**
  * @brief server thread handle
  */
-static osal_thread_t* main_task_handle;
+static os_thread_t* main_task_handle;
 
 /**
  * @brief TCP listener thread handle
  */
-static osal_thread_t* tcp_task_handle;
+static os_thread_t* tcp_task_handle;
 
 /**
  * @brief mutual exclusion semaphore
  */
-static osal_mutex_t*  queue_lock;
+static os_mutex_t*  queue_lock;
 
 /**
  * @brief Indicates a lost connection and wakes the TCP thread
  * to wait for a new client.
  */
-static osal_sem_t* lost_conn_sema;
+static os_sem_t* lost_conn_sema;
 
 /**
  * @brief Set of events to wake the main thread
  */
-static osal_event_t* wakeup_events;
+static os_event_t* wakeup_events;
 
 #if RLOG_DLOG_ENABLE
 /**
@@ -240,7 +240,7 @@ void queue_init(void)
 static
 void queue_put(log_t log, const char* msg)
 {
-    osal_lock_mutex(queue_lock);
+    os_mutex_lock(queue_lock);
 
     if( msg_queue.cnt < MSG_QUEUE_SIZE )
         msg_queue.cnt++;
@@ -255,7 +255,7 @@ void queue_put(log_t log, const char* msg)
     if( msg_queue.cnt > msg_queue.max_cnt )
         msg_queue.max_cnt = msg_queue.cnt;
 
-    osal_unlock_mutex(queue_lock);
+    os_mutex_unlock(queue_lock);
 
 #if _DEBUG_QUEUE_        
         printf("%s \n", msg);
@@ -267,11 +267,11 @@ int queue_get(char* msg)
 {
     log_t log;
 
-    osal_lock_mutex(queue_lock);
+    os_mutex_lock(queue_lock);
 
     if( msg_queue.cnt == 0 )
     {   
-        osal_unlock_mutex(queue_lock); 
+        os_mutex_unlock(queue_lock); 
         return 0;
     }
 
@@ -281,7 +281,7 @@ int queue_get(char* msg)
 
     msg_queue.head = (msg_queue.head + 1) % MSG_QUEUE_SIZE;
     msg_queue.cnt--;
-    osal_unlock_mutex(queue_lock);
+    os_mutex_unlock(queue_lock);
 
     make_log_string(msg, &log);
     return strlen(msg);
@@ -295,26 +295,26 @@ int rlog_init(const char* filepath, unsigned int size)
 
     queue_init();
 
-    queue_lock = osal_create_mutex();
+    queue_lock = os_mutex_create();
     if( queue_lock == NULL ) {
         err = -1;
         goto INIT_FAIL;
     }
-    lost_conn_sema = osal_sem_create(1, 0);
+    lost_conn_sema = os_sem_create(1, 0);
     if( lost_conn_sema == NULL ) {
         err = -2;
         goto INIT_FAIL;
     }
 
-    wakeup_events = osal_create_event();        
+    wakeup_events = os_event_create();        
 
-    main_task_handle = osal_create_thread("rlog_main_tsk", main_thread, NULL, RLOG_MAIN_TASK_STACK_SIZE, RLOG_TASK_PRIO);
+    main_task_handle = os_thread_create("rlog_main_tsk", main_thread, NULL, RLOG_MAIN_TASK_STACK_SIZE, RLOG_TASK_PRIO);
     if( main_task_handle == NULL ) {
         err = -3;
         goto INIT_FAIL;
     }
     
-    tcp_task_handle = osal_create_thread("rlog_tcp_tsk", tcp_thread, NULL, RLOG_TCP_TASK_STACK_SIZE, RLOG_TASK_PRIO);
+    tcp_task_handle = os_thread_create("rlog_tcp_tsk", tcp_thread, NULL, RLOG_TCP_TASK_STACK_SIZE, RLOG_TASK_PRIO);
     if( tcp_task_handle == NULL ) {
         err = -4;
         goto INIT_FAIL;
@@ -342,19 +342,19 @@ void rlog(RLOG_TYPE type, const char* msg)
 #endif
     log.type = type;
     queue_put(log, msg);
-    osal_event_set(wakeup_events, EVENT_NEW_MSG);
+    os_event_set(wakeup_events, EVENT_NEW_MSG);
 }
 
 rlog_server_stats_t rlog_get_stats(void)
 {
     rlog_server_stats_t stats;
 
-    osal_lock_mutex(queue_lock);
+    os_mutex_lock(queue_lock);
     stats.status    = server_status;
     stats.queue_ovf = msg_queue.ovf;
     stats.queue_cnt = msg_queue.cnt;
     stats.queue_max_cnt = msg_queue.max_cnt;    
-    osal_unlock_mutex(queue_lock);
+    os_mutex_unlock(queue_lock);
 
     return stats;
 }
@@ -364,7 +364,7 @@ rlog_server_stats_t rlog_get_stats(void)
 #if RLOG_SEND_HEARTBEAT
     #define EVENT_TIMEOUT 10
 #else
-    #define EVENT_TIMEOUT OSAL_WAIT_FOREVER
+    #define EVENT_TIMEOUT OS_WAIT_FOREVER
 #endif
 
 static
@@ -377,8 +377,8 @@ void main_thread(void* arg)
     while( 1 )
     { 
         server_status = RLOG_SLEEPING;
-        evts = osal_event_wait(wakeup_events, EVENTS_MASK, EVENT_TIMEOUT);
-        osal_event_clr(wakeup_events, evts);
+        evts = os_event_wait(wakeup_events, EVENTS_MASK, EVENT_TIMEOUT);
+        os_event_clear(wakeup_events, evts);
 
         if( !evts )
         {
@@ -404,11 +404,11 @@ void main_thread(void* arg)
                     if( net_send(msg_buffer, strlen(msg_buffer)) < 0 )
                     {
                         rlog(RLOG_WARNING,"[RLOG] Lost connection");
-                        osal_sem_signal(lost_conn_sema);
+                        os_sem_signal(lost_conn_sema);
                         state = STATE_DISCONNECTED;
                         break;
                     }
-                    osal_sleep(QUEUE_POLLING_PERIOD_US);                    
+                    os_sleep_us(QUEUE_POLLING_PERIOD_US);                    
                 }
                 else if (ret != DLOG_EMPTY_QUEUE)
                 {
@@ -430,13 +430,13 @@ void main_thread(void* arg)
                 break;
                 case STATE_DISCONNECTED:
                 {
-                    osal_sem_signal(lost_conn_sema);
+                    os_sem_signal(lost_conn_sema);
 #if RLOG_DLOG_ENABLE                                     
                     while( queue_get(msg_buffer) )
                     {
                         server_status = RLOG_DUMPING_RAM_QUEUE;
                         dlog_put(&logger, msg_buffer);    
-                        osal_sleep(QUEUE_POLLING_PERIOD_US);
+                        os_sleep_us(QUEUE_POLLING_PERIOD_US);
                     }
 #endif                    
                 }
@@ -450,11 +450,11 @@ void main_thread(void* arg)
                         if( net_send(msg_buffer,strlen(msg_buffer)) < 0 )
                         {
                             rlog(RLOG_WARNING,"[RLOG] Lost connection");
-                            osal_sem_signal(lost_conn_sema);
+                            os_sem_signal(lost_conn_sema);
                             state = STATE_DISCONNECTED;
                             break;
                         }
-                        osal_sleep(QUEUE_POLLING_PERIOD_US);
+                        os_sleep_us(QUEUE_POLLING_PERIOD_US);
                     }
                 }
                 break;
@@ -487,12 +487,12 @@ void tcp_thread(void* arg)
                 rlog(RLOG_INFO, aux_buffer);
             }
 
-            osal_event_set(wakeup_events, EVENT_NEW_CONNECTION);
-            osal_sem_wait(lost_conn_sema, OSAL_WAIT_FOREVER);
+            os_event_set(wakeup_events, EVENT_NEW_CONNECTION);
+            os_sem_wait(lost_conn_sema, OS_WAIT_FOREVER);
         }
         else
         {
-            osal_sleep(10 * 1000 /*10ms*/);
+            os_sleep_us(10 * 1000 /*10ms*/);
         }
     }
 }
