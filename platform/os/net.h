@@ -59,4 +59,13 @@ int net_send(const void* buf, int len);
  */
 int net_recv(void* buf, int len);
 
+/**
+ * @brief Get a string with client IP address
+ * 
+ * @param buf Buffer to store the string
+ * @param size Buffer size
+ * @return int 
+ */
+const char* net_get_client_ip(void);
+
 #endif //_RLOG_NET_H_

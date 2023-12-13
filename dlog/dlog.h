@@ -119,9 +119,10 @@ int dlog_write_test(dlog_t* ptr, unsigned int n);
 /**
  * @brief Reads and prints all unread messages in the log file 
  * @param ptr Pointer to the log file control block
+ * @param n Number of messages to read.
  * @return DLOG_ERR_CODES
  */
-int dlog_read_test(dlog_t* ptr);
+int dlog_read_test(dlog_t* ptr, unsigned int n);
 
 /**
  * @brief Close the log file and reset control block

@@ -36,6 +36,7 @@
 
 static int socket_fd = -1;
 static int cli_socket_fd = -1;
+static char cli_ip[INET_ADDRSTRLEN] = "";
 static struct sockaddr_in sock_addr = { 0 };
 
 int net_init()
@@ -83,6 +84,8 @@ int net_wait_conn()
     if (cli_socket_fd < 0)
         return -2;
 
+    struct in_addr ipAddr = client.sin_addr;
+    inet_ntop( AF_INET, &ipAddr, cli_ip, INET_ADDRSTRLEN );
 
     return 0;
 }
@@ -113,3 +116,12 @@ int net_recv(void* buf, int len)
 
     return ret;
 }
+
+const char* net_get_client_ip()
+{
+    if (cli_socket_fd < 0)
+        return NULL;
+
+    return (const char*) cli_ip;
+}
+

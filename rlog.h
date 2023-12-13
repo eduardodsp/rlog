@@ -26,7 +26,21 @@
  * @brief Current RLOG version.
  * This follows the classic semantic versioning format
  */
-#define RLOG_VERSION "1.0.0"
+#define RLOG_VERSION "2.0.0"
+
+/**
+ * @brief User defined maximum size of log messages.
+ */
+#ifndef RLOG_MAX_SIZE_CHAR
+    #define RLOG_MAX_SIZE_CHAR  80
+#endif
+
+/**
+ * @brief Enable (1) or Disable (0) timestamping of messages.
+ */
+#ifndef RLOG_TIMESTAMP_ENABLE
+    #define RLOG_TIMESTAMP_ENABLE 1
+#endif
 
 /**
  * @brief API success return 
@@ -39,17 +53,17 @@ typedef enum
     RLOG_WARNING,
     RLOG_ERROR, 
 
-}rlog_type_e;
-
+}RLOG_TYPE;
 
 typedef enum
 {
-    RLOG_STS_INVALID,
-    RLOG_STS_INTIALIZING,
-    RLOG_STS_RUNNING,
-    RLOG_STS_DEAD,
+    RLOG_INTIALIZING,
+    RLOG_SLEEPING,
+    RLOG_DUMPING_DLOG,
+    RLOG_DUMPING_RAM_QUEUE,
+    RLOG_DEAD,
 
-}rlog_sts_e;
+}RLOG_STATUS;
 
 typedef struct rlog_server_stats_t
 {
@@ -71,7 +85,7 @@ typedef struct rlog_server_stats_t
     /**
      * @brief Current server status
      */
-    rlog_sts_e  status;
+    RLOG_STATUS  status;
 
 } rlog_server_stats_t;
 
@@ -84,12 +98,10 @@ int rlog_init(void);
 /**
  * @brief Insert a log message into the queue
  * 
- * @param tag Arbitrary string with up to 8 characters.
- * @param type Message type identifier, see @rlog_type_e.
+ * @param type Message type identifier, see @RLOG_TYPE.
  * @param msg Message to be logged.
- * @return 0 on success, negative number on failure.
  */
-int rlog(char* tag, rlog_type_e type, char* msg);
+void rlog(RLOG_TYPE type, const char* msg);
 
 /**
  * @brief Get server statistics 

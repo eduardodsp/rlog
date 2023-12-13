@@ -6,10 +6,10 @@ I wrote this to help me monitor the status of devices on my other projects. Some
 
     - Simple and clean APIs
     - Timestamped messages.
-    - Easy to filter by type and by context.
     - Asynchronous write.
     - Thread safety. Multiple threads will write to the same log buffer
     - Portable, since I will be using on other projects.
+    - Support for persistence file when no client is connected.
 
 ## Supported Platforms
 |   OS          | Target          | Status          |
@@ -28,8 +28,8 @@ I wrote this to help me monitor the status of devices on my other projects. Some
     // Initialize RLOG server
     int t_err = rlog_init();
     if(t_err == RLOG_OK) {
-        // Log an INFO message, with tag "TEST"
-        rlog("TEST", RLOG_INFO,"HELLO WORLD!");
+        // Log an INFO message
+        rlog(RLOG_INFO,"HELLO WORLD!");
     }
     else {
         printf("RLOG init failed, error: %d \n", t_err);
@@ -41,21 +41,18 @@ The header files on [platform directory](https://github.com/eduardodsp/rlog/tree
 ```
 platform
 |
-|-- env (Operating system and middleware APIs)  
-|   |-- rlog_net.h (Network API)
-|   |-- rlog_osal.h (Operating systems abstraction layer)
+|-- net.h (Network API)
+|-- osal.h (Operating systems abstraction layer)
+|-- os (Operating system and middleware APIs)  
 |   |-- FreeRTOS (FreeRTOS implementation)
 |   '-- POSIX (POSIX implementation, future!)
 |
-|-- target   (Hardware dependent APIs)
-|   |-- rlog_rtc.h (Real Time Clock APIs)
-|   '-- ESP32 (Generic ESP32 implementation)
 
 ```
 
-
 ## Roadmap
-    - Improve API documentation
+    - Improve API documentation.
+    - Support for RFC-6587 (Syslog over TCP).
+    - CRC check for persistence file.
     - Add multiclient support. This is a must.
-    - Port to other popular platforms depending on my needs
-    - Add support for other protocols (UART, SPI, CAN etc..) depending on my needs.
+    - Port to other popular platforms depending on my needs.

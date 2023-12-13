@@ -29,9 +29,9 @@
 #include "freertos/timers.h"
 #include "freertos/queue.h"
 #include "freertos/event_groups.h"
+#include <time.h>
 
 #include "../osal.h"
-#include "../../target/rtc.h"
 
 #define TIME_TO_TICKS(ms) \
    ((ms == OSAL_WAIT_FOREVER) ? portMAX_DELAY : (ms) / portTICK_PERIOD_MS)
@@ -217,7 +217,12 @@ void osal_sem_destroy(osal_sem_t * sem)
 
 void osal_get_date(char* buffer)
 {
-    rtc_get_date(buffer);
+    time_t rawtime;
+    struct tm * timeinfo;
+
+    time ( &rawtime );
+    timeinfo = localtime ( &rawtime );
+    sprintf(buffer, "%02d-%02d-%d %02d:%02d:%02d",timeinfo->tm_mday, timeinfo->tm_mon + 1, timeinfo->tm_year + 1900, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
 }
 
 void osal_sleep(uint32_t t)
