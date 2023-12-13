@@ -22,11 +22,13 @@
 #ifndef _RLOG_H_
 #define _RLOG_H_
 
+#include <stdarg.h>
+
 /**
  * @brief Current RLOG version.
  * This follows the classic semantic versioning format
  */
-#define RLOG_VERSION "2.0.0"
+#define RLOG_VERSION "2.2.0"
 
 /**
  * @brief User defined maximum size of log messages.
@@ -110,6 +112,16 @@ int rlog_init(const char* filepath, unsigned int size);
  * @param msg Message to be logged.
  */
 void rlog(RLOG_TYPE type, const char* msg);
+
+/**
+ * @brief Composes a string based on format and variable arguments
+ * and insert into the queue
+ * 
+ * @param type Message type identifier, see @RLOG_TYPE.
+ * @param format Message format to be used to create a new message.
+ * @param ... format arguments
+ */
+void rlogf(RLOG_TYPE type, const char* format, ...);
 
 /**
  * @brief Get server statistics 
