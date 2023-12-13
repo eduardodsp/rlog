@@ -43,7 +43,7 @@
  * @brief User defined log message queue size
  */
 #ifndef RLOG_MSG_QUEUE_SIZE
-    #define RLOG_MSG_QUEUE_SIZE 4
+    #define RLOG_MSG_QUEUE_SIZE 10
 #endif
 
 /**
@@ -54,7 +54,7 @@
 #endif
 
 #define THREAD_PERIOD_US (RLOG_THREAD_PERIOD_MS * 1000)
-#define QUEUE_POLLING_PERIOD_US 1000
+#define QUEUE_POLLING_PERIOD_US 0
 
 /**
  * @brief Enable (1) or disable (0) the sending of periodic heartbeat messages

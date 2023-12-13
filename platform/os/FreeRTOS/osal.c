@@ -227,6 +227,13 @@ void osal_get_date(char* buffer)
 
 void osal_sleep(uint32_t t)
 {
-	TickType_t xDelay = t / (portTICK_PERIOD_MS * 1000);
-	vTaskDelay(xDelay);
+    if(t == 0)
+    {
+        taskYIELD();
+    }
+    else
+    {
+	    TickType_t xDelay = t / (portTICK_PERIOD_MS * 1000);
+	    vTaskDelay(xDelay);
+    }
 }
