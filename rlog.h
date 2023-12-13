@@ -28,7 +28,7 @@
  * @brief Current RLOG version.
  * This follows the classic semantic versioning format
  */
-#define RLOG_VERSION "2.0.0"
+#define RLOG_VERSION "2.2.0"
 
 /**
  * @brief User defined maximum size of log messages.
