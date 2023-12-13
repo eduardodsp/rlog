@@ -39,10 +39,6 @@
 #define RLOG_TASK_PRIO 8
 
 
-#ifndef RLOG_DLOG_ENABLE
-    #define RLOG_DLOG_ENABLE 1
-#endif
-
 /**
  * @brief User defined log message queue size
  */
@@ -124,7 +120,6 @@ static char msg_buffer[MSG_MAX_SIZE_CHAR] = { 0 };
  * @brief  Auxiliary statically allocated buffer
  */
 static char aux_buffer[MSG_MAX_SIZE_CHAR] = { 0 };
-
 
 /**
  * @brief Server status
@@ -293,7 +288,7 @@ int queue_get(char* msg)
 }
 
 
-int rlog_init(void)
+int rlog_init(const char* filepath, unsigned int size)
 {
     int err = 0;
     server_status = RLOG_INTIALIZING;
@@ -326,13 +321,13 @@ int rlog_init(void)
     }
 
 #if RLOG_DLOG_ENABLE
-    if( dlog_open(&logger, "/spiffs/rlog", RLOG_FILE_MAX_NUM_ENTRIES) != DLOG_OK ) {
+    if( dlog_open(&logger, filepath, size) != DLOG_OK ) {
         err = -5;
         goto INIT_FAIL;            
     }
 #endif
 
-    return 0;
+    return RLOG_OK;
 
 INIT_FAIL:
     server_status = RLOG_DEAD;
