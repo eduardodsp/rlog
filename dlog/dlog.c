@@ -5,11 +5,17 @@
 #define DLOG_TAIL_LINE  2
 #define DLOG_HEAD_LINE  3
 
-#define DLOG_LOG_BEGIN_LINE 5
+#define DLOG_FIRST_ENTRY_LINE 5
+
+#define DLOG_FULL_LINE_SIZE (DLOG_LINE_MAX_SIZE + 1)
+#ifdef _____fpos_t_defined
+#define UPDATE_QUEUE_POS(pos, index)  pos.__pos = ptr->log_begin_pos.__pos + ( index * DLOG_FULL_LINE_SIZE );
+#else
+#define UPDATE_QUEUE_POS(pos, index)  pos = ptr->log_begin_pos + ( index * DLOG_FULL_LINE_SIZE );
+#endif    
 
 const unsigned char DLOG_OPT_DEFAULT_ON = DLOG_OPT_AUTO_CLR | DLOG_OPT_OVERWRITE;
 
-const char DLOG_EXT[] = ".log";
 static char string_terminator = ';';
 static char alignment_character = '.';
 
@@ -34,11 +40,20 @@ int dlog_open(dlog_t* ptr, char* filename, unsigned int size)
     if(size == 0)
         return DLOG_BAD_PARAM;
 
-    if(filename != NULL) {
-        snprintf(ptr->filename, DLOG_NAME_MAX_SIZE - sizeof(DLOG_EXT), "%s%s", filename, DLOG_EXT);
+    if(filename != NULL) 
+    {
+        if(strlen(filename) <= DLOG_NAME_MAX_SIZE) 
+        {
+            snprintf(ptr->filename, DLOG_NAME_MAX_SIZE, "%s", filename);
+        }
+        else
+        {
+            return DLOG_BAD_PARAM;
+        }
     }
-    else{
-        snprintf(ptr->filename, DLOG_NAME_MAX_SIZE - sizeof(DLOG_EXT), "dlog%s", DLOG_EXT);
+    else
+    {
+        snprintf(ptr->filename, DLOG_NAME_MAX_SIZE, "dlog.log");
     }
 
     if( !open_log_file(ptr) ) 
@@ -65,11 +80,11 @@ int dlog_open(dlog_t* ptr, char* filename, unsigned int size)
         return DLOG_INTERNAL_ERR;
 
     //set the log begin position
-    seek_position(ptr->file_ptr, DLOG_LOG_BEGIN_LINE, &ptr->log_begin_pos);
+    seek_position(ptr->file_ptr, DLOG_FIRST_ENTRY_LINE, &ptr->log_begin_pos);
 
     //set the tail and head position
-    seek_position(ptr->file_ptr, ptr->qtail + DLOG_LOG_BEGIN_LINE, &ptr->tail_pos);
-    seek_position(ptr->file_ptr, ptr->qhead + DLOG_LOG_BEGIN_LINE, &ptr->head_pos);
+    UPDATE_QUEUE_POS(ptr->tail_pos, ptr->qtail);
+    UPDATE_QUEUE_POS(ptr->head_pos, ptr->qhead);
 
 
     return DLOG_OK;
@@ -206,7 +221,6 @@ int seek_position(FILE* pfile, unsigned int line, fpos_t* pos)
 
 int dlog_get(dlog_t* ptr, char* msg, int size)
 {
-    fpos_t aux_pos;
     if(ptr == NULL)
         return DLOG_NULL_PTR;
 
@@ -214,10 +228,7 @@ int dlog_get(dlog_t* ptr, char* msg, int size)
         return DLOG_EMPTY_QUEUE;
 
     //set file to head position
-    fsetpos(ptr->file_ptr , &ptr->head_pos );
-
-    //save current position
-    aux_pos = ptr->head_pos;
+    fsetpos(ptr->file_ptr , &ptr->head_pos);
 
     for(int i = 0; i < size; i++)
     {
@@ -230,16 +241,7 @@ int dlog_get(dlog_t* ptr, char* msg, int size)
     }
 
     ptr->qhead = (ptr->qhead + 1) % ptr->qsize;
-    fgetpos(ptr->file_ptr, &ptr->head_pos);
-
-    #ifdef _____fpos_t_defined
-    ptr->head_pos.__pos = aux_pos.__pos + DLOG_LINE_MAX_SIZE + 1;
-    #else
-    ptr->head_pos = aux_pos + DLOG_LINE_MAX_SIZE + 1;
-    #endif
-
-    if( ptr->qhead == 0) 
-        ptr->head_pos = ptr->log_begin_pos;
+    UPDATE_QUEUE_POS(ptr->head_pos, ptr->qhead);
 
     ptr->qcount--;
 
@@ -251,7 +253,6 @@ int dlog_get(dlog_t* ptr, char* msg, int size)
 
 int dlog_put(dlog_t* ptr, char* msg)
 {
-    fpos_t aux_pos;
     unsigned char full = 0;
 
     if( ptr == NULL )
@@ -263,52 +264,24 @@ int dlog_put(dlog_t* ptr, char* msg)
     if( !ptr->en_overwrite && full )
         return DLOG_FULL_QUEUE;
 
-    int size = strlen(msg);
+    size_t size = strlen(msg);
 
     if( size >= DLOG_LINE_MAX_SIZE )
         return DLOG_MSG_SIZE_ERR;
 
     // set file position to tail
-    fsetpos (ptr->file_ptr , &ptr->tail_pos );
-
-    //save current position
-    aux_pos = ptr->tail_pos;
+    fsetpos(ptr->file_ptr , &ptr->tail_pos);
 
     // insert new message
-    fputs (msg, ptr->file_ptr);
+    fputs(msg, ptr->file_ptr);
     fputc(string_terminator, ptr->file_ptr);
 
     // if we overrun the head index we must update it to keep the FIFO behaviour
-    if ( ptr->qtail == ptr->qhead && (full))
+    if ( ( ptr->qtail == ptr->qhead ) && full )
     {
         ptr->qhead = (ptr->qhead + 1) % ptr->qsize;
-        if( ptr->qhead )
-        {
-            #ifdef _____fpos_t_defined
-            ptr->head_pos.__pos = ptr->tail_pos.__pos + DLOG_LINE_MAX_SIZE + 1;
-            #else
-            ptr->head_pos = ptr->tail_pos + DLOG_LINE_MAX_SIZE + 1;
-            #endif
-        }
-        else
-        {
-            ptr->head_pos = ptr->log_begin_pos;
-        }
+        UPDATE_QUEUE_POS(ptr->head_pos, ptr->qhead);                
     }
-
-    // update tail
-    ptr->qtail = (ptr->qtail + 1) % ptr->qsize;
-
-    // calculate next position by adding the current position
-    // to whats left to complete a maximum line plus a newline
-    // character
-    fgetpos(ptr->file_ptr, &ptr->tail_pos);
-
-    #ifdef _____fpos_t_defined
-    ptr->tail_pos.__pos = aux_pos.__pos + DLOG_LINE_MAX_SIZE + 1;
-    #else
-    ptr->tail_pos = aux_pos + DLOG_LINE_MAX_SIZE + 1;
-    #endif    
 
     if ( ptr->en_auto_clr )
     {
@@ -318,9 +291,10 @@ int dlog_put(dlog_t* ptr, char* msg)
         }
     }
 
-    if( ptr->qtail == 0 )
-        ptr->tail_pos = ptr->log_begin_pos;
-
+    // update tail
+    ptr->qtail = (ptr->qtail + 1) % ptr->qsize;
+    UPDATE_QUEUE_POS(ptr->tail_pos, ptr->qtail);
+ 
     if( ptr->qcount < ptr->qsize )
         ptr->qcount++;
 
@@ -363,28 +337,37 @@ int dlog_write_test(dlog_t* ptr, unsigned int n)
     return 1;
 }
 
-int dlog_read_test(dlog_t* ptr)
+int dlog_read_test(dlog_t* ptr, unsigned int n)
 {
     char readbuf[DLOG_LINE_MAX_SIZE] = "";
+    int ret = DLOG_OK;
 
     if( ptr == NULL )
         return DLOG_NULL_PTR;
 
-    int ret = dlog_get(ptr, readbuf, sizeof(readbuf));
-    usleep(1000);
-    while(ret)
+    if(n == 0) n = 1;
+
+    do
     {
-        printf("%s\n", readbuf);
-        ret = dlog_get(ptr, readbuf, sizeof(readbuf));
+        n--;
+        if(!n) { break; }
 
-        if ( ret != DLOG_OK )
+        ret = dlog_get(ptr, readbuf, sizeof(readbuf));                
+        if ( ret == DLOG_OK )
         {
-            printf("dlog_get FAILED %d\n", ret);
-            return 0;
+            printf("%s\n", readbuf);
+            usleep(1000);              
         }
+        else if (ret == DLOG_EMPTY_QUEUE)
+        {
+            printf("DLOG is empty\n");
+        }
+        else
+        {
+            printf("dlog_get error %d\n", ret);
+        }        
 
-        usleep(1000);
-    }
+    } while( ret == DLOG_OK );
 
     return 1;
 }
