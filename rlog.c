@@ -179,6 +179,15 @@ static void queue_init(void);
 static void  queue_put(log_t log, const char* msg);
 
 /**
+ * @brief Composes a string based on a format string and args
+ * and insert in the queue
+ * @param log Log metadata
+ * @param format Format string
+ * @param args Argument list
+ */
+static void queue_putf(log_t log, const char* format,  va_list args);
+
+/**
  * @brief Removes a message from the queue
  * 
  * @param msg Buffer to hold the null-terminated string
@@ -250,6 +259,33 @@ void queue_put(log_t log, const char* msg)
     msg_queue.buffer[msg_queue.tail].timestamp = log.timestamp;
     msg_queue.buffer[msg_queue.tail].type = log.type;
     fast_strncpy(msg_queue.buffer[msg_queue.tail].msg, msg, sizeof(msg_queue.buffer[msg_queue.tail].msg));
+    msg_queue.tail = (msg_queue.tail + 1) % MSG_QUEUE_SIZE;
+    
+    if( msg_queue.cnt > msg_queue.max_cnt )
+        msg_queue.max_cnt = msg_queue.cnt;
+
+    os_mutex_unlock(queue_lock);
+
+#if _DEBUG_QUEUE_        
+        printf("%s \n", msg);
+#endif  
+}
+
+static
+void queue_putf(log_t log, const char* format,  va_list args)
+{
+    os_mutex_lock(queue_lock);
+
+    if( msg_queue.cnt < MSG_QUEUE_SIZE )
+        msg_queue.cnt++;
+    else
+        msg_queue.ovf++;
+
+    msg_queue.buffer[msg_queue.tail].timestamp = log.timestamp;
+    msg_queue.buffer[msg_queue.tail].type = log.type;
+    
+    vsnprintf(msg_queue.buffer[msg_queue.tail].msg, sizeof(msg_queue.buffer[msg_queue.tail].msg), format, args);
+
     msg_queue.tail = (msg_queue.tail + 1) % MSG_QUEUE_SIZE;
     
     if( msg_queue.cnt > msg_queue.max_cnt )
@@ -342,6 +378,21 @@ void rlog(RLOG_TYPE type, const char* msg)
 #endif
     log.type = type;
     queue_put(log, msg);
+    os_event_set(wakeup_events, EVENT_NEW_MSG);
+}
+
+void rlogf(RLOG_TYPE type, const char* format, ...)
+{
+    va_list args;
+    log_t log;
+
+#if RLOG_TIMESTAMP_ENABLE
+    time(&log.timestamp);
+#endif
+    log.type = type;
+    va_start(args, format);
+    queue_putf(log, format, args);
+    va_end(args);
     os_event_set(wakeup_events, EVENT_NEW_MSG);
 }
 
