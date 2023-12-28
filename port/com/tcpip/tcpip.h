@@ -1,7 +1,7 @@
 /**
- * @file net.h
+ * @file tcpip.h
  * @author edsp
- * @brief Network APIs
+ * @brief Default TCP/IP IP APIs for client/server communications
  * @version 1.0.0
  * @date 2021-11-06
  * 
@@ -21,25 +21,27 @@
  * 
  */
 
-#ifndef _RLOG_NET_H_
-#define _RLOG_NET_H_
+#ifndef _RLOG_TCPIP_H_
+#define _RLOG_TCPIP_H_
+
+#include "../interfaces.h"
 
 /**
  * @brief User defined RLOG protocol TCP Port 
  */
-#define RLOG_NET_PORT  8888
+#define RLOG_TCPIP_PORT  8888
 
 /**
  * @brief Initialize server TCP socket
  * @return 0 on success, negative number on failure.
  */
-int net_init();
+int rlog_tcp_init();
 
 /**
  * @brief Wait for connection
  * @return 0 on success, negative number on failure.
  */
-int net_wait_conn();
+int rlog_tcp_wait_conn();
 
 /**
  * @brief Send data to TCP client
@@ -48,7 +50,7 @@ int net_wait_conn();
  * @param len Length of the message in bytes
  * @return 0 on success, negative number on failure.
  */
-int net_send(const void* buf, int len);
+int rlog_tcp_send(const void* buf, int len);
 
 /**
  * @brief Receive data from client
@@ -57,15 +59,12 @@ int net_send(const void* buf, int len);
  * @param len size of the buffer
  * @return Number of bytes received, -1 for error
  */
-int net_recv(void* buf, int len);
+int rlog_tcp_recv(void* buf, int len);
 
 /**
- * @brief Get a string with client IP address
- * 
- * @param buf Buffer to store the string
- * @param size Buffer size
- * @return int 
+ * @brief Get a string with client IPv4 address
+ * @return Pointer to constant string containing clients IPv4 address
  */
-const char* net_get_client_ip(void);
+const char* rlog_tcp_get_client_ip(void);
 
-#endif //_RLOG_NET_H_
+#endif //_RLOG_TCPIP_H_

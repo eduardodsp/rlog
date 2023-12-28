@@ -22,13 +22,17 @@
 #ifndef _RLOG_H_
 #define _RLOG_H_
 
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdarg.h>
+
+#include "port/com/interfaces.h"
 
 /**
  * @brief Current RLOG version.
  * This follows the classic semantic versioning format
  */
-#define RLOG_VERSION "2.2.0"
+#define RLOG_VERSION "2.3.0"
 
 /**
  * @brief User defined maximum size of log messages.
@@ -71,6 +75,15 @@ typedef enum
 
 }RLOG_STATUS;
 
+/**
+ * @brief Initialize interface structure. See \ref rlog_ifc_t for more details
+ * 
+ * @param ifc Pointer to interface descriptor strucutre
+ * @param usr_init Function pointer to intialize communication interface
+ * @param usr_connect Function pointer wait for client connection
+ * @param usr_send Function pointer send messages to the client.
+ * @param usr_get_cli  Function pointer to get a string with information about the client
+ */
 typedef struct rlog_server_stats_t
 {
     /**
@@ -91,8 +104,8 @@ typedef struct rlog_server_stats_t
     /**
      * @brief Current server status
      */
-    RLOG_STATUS  status;
-
+    RLOG_STATUS status;
+    
 } rlog_server_stats_t;
 
 /**
@@ -101,9 +114,11 @@ typedef struct rlog_server_stats_t
  * RLOG_DLOG_ENABLE is set to 1, else it is ignored
  * @param size Size of backup file in number of message entries. Only used if
  * RLOG_DLOG_ENABLE is set to 1, else it is ignored
+ * @param ifc Communication interface to be used. If set to RLOG_DEFAULT_IFC then
+ * standard TCP/IP protocol will be used. See \ref rlog_ifc_t for more details.
  * @return RLOG_OK on success, negative number on failure.
  */
-int rlog_init(const char* filepath, unsigned int size);
+int rlog_init(const char* filepath, unsigned int size, rlog_ifc_t ifc);
 
 /**
  * @brief Insert a log message into the queue
@@ -128,5 +143,28 @@ void rlogf(RLOG_TYPE type, const char* format, ...);
  * @return Server runtime statistics for debuging 
  */
 rlog_server_stats_t rlog_get_stats(void);
+
+/**
+ * @brief Initialize interface structure. See \ref rlog_ifc_t for more details
+ * 
+ * @param ifc Pointer to interface descriptor strucutre
+ * @param usr_init Function pointer to intialize communication interface
+ * @param usr_connect Function pointer wait for client connection
+ * @param usr_send Function pointer send messages to the client.
+ * @param usr_get_cli  Function pointer to get a string with information about the client
+ */
+inline void rlog_init_interface( 
+    rlog_ifc_t* ifc, 
+    int (*usr_init)(void),
+    int (*usr_connect)(void),
+    int (*usr_send)(const void* buf, int len),
+    const char* (*usr_get_cli)(void) 
+    )
+{
+    ifc->init       = usr_init;
+    ifc->connect    = usr_connect;
+    ifc->send       = usr_send;
+    ifc->get_cli    = usr_get_cli;
+}
 
 #endif //_RLOG_H_
