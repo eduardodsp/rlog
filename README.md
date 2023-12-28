@@ -27,7 +27,7 @@ I wrote this to help me monitor the status of devices on my other projects. Some
     // Initialize network interface...
     
     // Initialize RLOG server and set up the backup file
-    int t_err = rlog_init("/spiffs/rlog.log", 40);
+    int t_err = rlog_init("/spiffs/rlog.log", 40, RLOG_DEFAULT_TCPIP);
     if(t_err == RLOG_OK) {
         // Log an INFO message
         rlog(RLOG_INFO,"HELLO WORLD!");

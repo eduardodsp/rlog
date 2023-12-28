@@ -48,7 +48,7 @@ typedef struct rlog_ifc_s
  * @brief Default TCP/IP interface implementation
  */
 extern rlog_ifc_t rlog_default_tcpip_ifc;
-#define RLOG_TCPIP_IFC rlog_default_tcpip_ifc
+#define RLOG_DEFAULT_TCPIP rlog_default_tcpip_ifc
  
 /*
 TODO: Add more interfaces..
@@ -63,6 +63,6 @@ extern rlog_ifc_t rlog_default_uart_ifc;
 /**
  * @brief Default interface to be used for server and client communication.
  */
-#define RLOG_DEFAULT_IFC RLOG_TCPIP_IFC
+#define RLOG_DEFAULT_IFC RLOG_DEFAULT_TCPIP
 
 #endif //_PORT_COM_INTERFACES_H_
