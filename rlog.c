@@ -27,8 +27,8 @@
 
 #include "dlog/dlog.h"
 #include "rlog.h"
-#include "platform/os/osal.h"
-#include "platform/os/net.h"
+#include "port/os/osal.h"
+#include "port/com/tcpip/tcpip.h"
 #include "format.h"
 
 #define _DEBUG_QUEUE_ 0
@@ -83,6 +83,7 @@
 #define EVENT_NEW_MSG           ( 1 << 1 )
 #define EVENTS_MASK             ( EVENT_NEW_CONNECTION | EVENT_NEW_MSG )
 
+rlog_ifc_t server_ifc;
 
 typedef enum
 {
@@ -324,21 +325,37 @@ int queue_get(char* msg)
 }
 
 
-int rlog_init(const char* filepath, unsigned int size)
+int rlog_init(const char* filepath, unsigned int size, rlog_ifc_t ifc)
 {
     int err = 0;
     server_status = RLOG_INTIALIZING;
 
+    if(ifc.connect == NULL) {
+        err = -1;
+        goto INIT_FAIL;
+    }
+
+    if(ifc.init == NULL) {
+        err = -1;
+        goto INIT_FAIL;
+    }
+
+    if(ifc.send == NULL) {
+        err = -1;
+        goto INIT_FAIL;
+    }
+
+    server_ifc = ifc;
     queue_init();
 
     queue_lock = os_mutex_create();
     if( queue_lock == NULL ) {
-        err = -1;
+        err = -2;
         goto INIT_FAIL;
     }
     lost_conn_sema = os_sem_create(1, 0);
     if( lost_conn_sema == NULL ) {
-        err = -2;
+        err = -3;
         goto INIT_FAIL;
     }
 
@@ -346,19 +363,19 @@ int rlog_init(const char* filepath, unsigned int size)
 
     main_task_handle = os_thread_create("rlog_main_tsk", main_thread, NULL, RLOG_MAIN_TASK_STACK_SIZE, RLOG_TASK_PRIO);
     if( main_task_handle == NULL ) {
-        err = -3;
+        err = -4;
         goto INIT_FAIL;
     }
     
     tcp_task_handle = os_thread_create("rlog_tcp_tsk", tcp_thread, NULL, RLOG_TCP_TASK_STACK_SIZE, RLOG_TASK_PRIO);
     if( tcp_task_handle == NULL ) {
-        err = -4;
+        err = -5;
         goto INIT_FAIL;
     }
 
 #if RLOG_DLOG_ENABLE
     if( dlog_open(&logger, filepath, size) != DLOG_OK ) {
-        err = -5;
+        err = -6;
         goto INIT_FAIL;            
     }
 #endif
@@ -452,7 +469,7 @@ void main_thread(void* arg)
                 ret = dlog_get(&logger, msg_buffer, sizeof(msg_buffer));                
                 if ( ret == DLOG_OK )
                 {
-                    if( net_send(msg_buffer, strlen(msg_buffer)) < 0 )
+                    if( server_ifc.send(msg_buffer, strlen(msg_buffer)) != RLOG_COM_OK )
                     {
                         rlog(RLOG_WARNING,"[RLOG] Lost connection");
                         os_sem_signal(lost_conn_sema);
@@ -461,7 +478,7 @@ void main_thread(void* arg)
                     }
                     os_sleep_us(QUEUE_POLLING_PERIOD_US);                    
                 }
-                else if (ret != DLOG_EMPTY_QUEUE)
+                else if ( ret != DLOG_EMPTY_QUEUE )
                 {
                     printf("dlog_get error %d\n", ret);
                 }
@@ -498,7 +515,7 @@ void main_thread(void* arg)
                     while( queue_get(msg_buffer) )
                     {
                         server_status = RLOG_DUMPING_RAM_QUEUE;
-                        if( net_send(msg_buffer,strlen(msg_buffer)) < 0 )
+                        if( server_ifc.send(msg_buffer,strlen(msg_buffer)) != RLOG_COM_OK )
                         {
                             rlog(RLOG_WARNING,"[RLOG] Lost connection");
                             os_sem_signal(lost_conn_sema);
@@ -520,24 +537,27 @@ void tcp_thread(void* arg)
 {
     const char* ip;
 
-    if ( net_init() < 0)
+    if ( server_ifc.init() != RLOG_COM_OK )
     {
 #if _DEBUG_THREAD_        
-        printf("tcp_thread net_init failed\n");
+        printf("tcp_thread server_ifc.init() failed\n");
 #endif        
         return;
     }
             
     while( 1 )
     {                       
-        if ( net_wait_conn() >= 0) 
+        if ( server_ifc.connect() == RLOG_COM_OK ) 
         {
-            ip = net_get_client_ip();
-            if(ip != NULL) {
-                snprintf(aux_buffer, sizeof(aux_buffer), "[RLOG] New connection from %s", ip);
-                rlog(RLOG_INFO, aux_buffer);
+            if( server_ifc.get_cli != NULL ) 
+            {
+                ip = server_ifc.get_cli();
+                if( ip != NULL ) 
+                {
+                    snprintf(aux_buffer, sizeof(aux_buffer), "[RLOG] New connection from %s", ip);
+                    rlog(RLOG_INFO, aux_buffer);
+                }
             }
-
             os_event_set(wakeup_events, EVENT_NEW_CONNECTION);
             os_sem_wait(lost_conn_sema, OS_WAIT_FOREVER);
         }

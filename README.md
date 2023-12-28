@@ -10,6 +10,7 @@ I wrote this to help me monitor the status of devices on my other projects. Some
     - Thread safety. Multiple threads will write to the same log buffer
     - Portable, since I will be using on other projects.
     - Support for persistence file when no client is connected.
+    - Support for multiple communication protocols including user defined protocols.
 
 ## Supported Platforms
 |   OS          | Target          | Status          |
@@ -37,13 +38,16 @@ I wrote this to help me monitor the status of devices on my other projects. Some
 ```
 ## Portability layer
 
-The header files on [platform directory](https://github.com/eduardodsp/rlog/tree/main/platform) define the APIs that must be implemented for each target system. 
+The header files on [port directory](https://github.com/eduardodsp/rlog/tree/main/port) define the APIs that must be implemented for each target system. 
 ```
-platform
+port/
 |
-|-- net.h (Network API)
-|-- osal.h (Operating systems abstraction layer)
-|-- os (Operating system and middleware APIs)  
+|-- com/ (Communication APIs)
+|   |-- interfaces.h (Supported communication protocols)
+|   '-- tcpip (Default TCP/IP APIs)
+|
+|-- os/ (Operating system and middleware APIs) 
+|   |-- osal.h (Operating systems abstraction layer) 
 |   |-- FreeRTOS (FreeRTOS implementation)
 |   '-- POSIX (POSIX implementation, future!)
 |

@@ -1,7 +1,7 @@
 /**
- * @file net.c
+ * @file tcp.c
  * @author edsp
- * @brief Network abstraction layert for FreeRTOS
+ * @brief Default TCP/IP IP APIs for client/server communications
  * @version 1.0.0
  * @date 2022-09-29
  * 
@@ -27,19 +27,26 @@
 #include "lwip/sockets.h"
 #include "lwip/sys.h"
 
-#include "../osal.h"
-#include "../net.h"
+#include "../../os/osal.h"
+#include "tcpip.h"
 
 #ifdef DPRINTF
 #include <stdio.h>
 #endif
+
+rlog_ifc_t rlog_default_tcpip_ifc = {
+    .init       = &rlog_tcp_init,
+    .connect    = &rlog_tcp_wait_conn,
+    .send       = &rlog_tcp_send,
+    .get_cli    = &rlog_tcp_get_client_ip,
+};
 
 static int socket_fd = -1;
 static int cli_socket_fd = -1;
 static char cli_ip[INET_ADDRSTRLEN] = "";
 static struct sockaddr_in sock_addr = { 0 };
 
-int net_init()
+int rlog_tcp_init()
 {
     socket_fd = socket(AF_INET , SOCK_STREAM , 0);
 
@@ -48,7 +55,7 @@ int net_init()
 
     sock_addr.sin_family = AF_INET;
     sock_addr.sin_addr.s_addr = INADDR_ANY;
-    sock_addr.sin_port = htons( RLOG_NET_PORT );
+    sock_addr.sin_port = htons( RLOG_TCPIP_PORT );
 
     //Bind
 	if(bind(socket_fd,(struct sockaddr *)&sock_addr , sizeof(sock_addr)) < 0)
@@ -69,7 +76,7 @@ int net_init()
     return 0;
 }
 
-int net_wait_conn()
+int rlog_tcp_wait_conn()
 {
     int len;
     struct sockaddr_in client;
@@ -90,7 +97,7 @@ int net_wait_conn()
     return 0;
 }
 
-int net_send(const void* buf, int len)
+int rlog_tcp_send(const void* buf, int len)
 {
 	int ret = 0;
     if(cli_socket_fd < 0)
@@ -107,7 +114,7 @@ int net_send(const void* buf, int len)
     return 0;
 }
 
-int net_recv(void* buf, int len)
+int rlog_tcp_recv(void* buf, int len)
 {
     if(cli_socket_fd < 0)
         return -1;
@@ -117,7 +124,7 @@ int net_recv(void* buf, int len)
     return ret;
 }
 
-const char* net_get_client_ip()
+const char* rlog_tcp_get_client_ip()
 {
     if (cli_socket_fd < 0)
         return NULL;
