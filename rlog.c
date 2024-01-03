@@ -31,13 +31,10 @@
 #include "port/com/tcpip/tcpip.h"
 #include "format.h"
 
-#define _RLOG_DEBUG_QUEUE_ 0
-#define _RLOG_DEBUG_ 1
+#define _RLOG_DEBUG_ 0
 
-#define RLOG_MAIN_TASK_STACK_SIZE 3192
-#define RLOG_COM_TASK_STACK_SIZE 1024
+#define RLOG_MAIN_TASK_STACK_SIZE 4096
 #define RLOG_TASK_PRIO 8
-
 
 /**
  * @brief User defined log message queue size
@@ -47,20 +44,10 @@
 #endif
 
 /**
- * @brief User defined server thread period in milliseconds
- */
-#ifndef RLOG_THREAD_PERIOD_MS
-    #define RLOG_THREAD_PERIOD_MS 10
-#endif
-
-#define THREAD_PERIOD_US (RLOG_THREAD_PERIOD_MS * 1000)
-#define QUEUE_POLLING_PERIOD_US 0
-
-/**
  * @brief Enable (1) or disable (0) the sending of periodic heartbeat messages
  */
 #ifndef RLOG_SEND_HEARTBEAT
-    #define RLOG_SEND_HEARTBEAT 0
+    #define RLOG_SEND_HEARTBEAT 1
 #endif
 
 /**
@@ -72,23 +59,15 @@
     #endif
 #endif
 
-#if RLOG_SEND_HEARTBEAT
-    #define HEARTBEAT_PERIOD_US (RLOG_HEARTBEAT_PERIOD_SEC * 1000000)
-    #define HEARTBEAT_PERIOD_TICKS (HEARTBEAT_PERIOD_US / THREAD_PERIOD_US)
-#endif
-
 #define MSG_QUEUE_SIZE RLOG_MSG_QUEUE_SIZE
 
-#define EVENT_NEW_CONNECTION    ( 1 << 0 )
-#define EVENT_NEW_MSG           ( 1 << 1 )
-#define EVENTS_MASK             ( EVENT_NEW_CONNECTION | EVENT_NEW_MSG )
-
-rlog_ifc_t server_ifc;
+#define EVENT_NEW_MSG           ( 1 << 0 )
+#define EVENTS_MASK             ( EVENT_NEW_MSG )
 
 typedef enum
 {
-    STATE_INIT,
     STATE_DISCONNECTED,
+    STATE_DUMPING_LOG,
     STATE_CONNECTED,
     
 }STATES;
@@ -137,12 +116,7 @@ static int  heartbeat_timer = 0;
 /**
  * @brief server thread handle
  */
-static os_thread_t* main_task_handle;
-
-/**
- * @brief COM listener thread handle
- */
-static os_thread_t* com_task_handle;
+static os_thread_t* thread_handle;
 
 /**
  * @brief mutual exclusion semaphore
@@ -150,15 +124,14 @@ static os_thread_t* com_task_handle;
 static os_mutex_t*  queue_lock;
 
 /**
- * @brief Indicates a lost connection and wakes the TCP thread
- * to wait for a new client.
- */
-static os_sem_t* lost_conn_sema;
-
-/**
  * @brief Set of events to wake the main thread
  */
 static os_event_t* wakeup_events;
+
+/**
+ * @brief Communication used by the server
+ */
+static rlog_ifc_t server_ifc;
 
 #if RLOG_DLOG_ENABLE
 /**
@@ -197,6 +170,19 @@ static void queue_putf(log_t log, const char* format,  va_list args);
 static int  queue_get(char* msg);
 
 /**
+ * @brief Reads a message from the queue without removing it
+ * 
+ * @param msg Buffer to hold the null-terminated string
+ * @return Length of the received message 
+ */
+static int queue_peek(char* msg);
+
+/**
+ * @brief Removes a message from the queue.
+ */
+static void queue_next(void);
+
+/**
  * @brief Main thread to receive new log messages and dispatch
  * to the remote client if connected, or to a backup file if
  * disconnected from client. As soon as a new client connects to
@@ -204,14 +190,7 @@ static int  queue_get(char* msg);
  * FIFO order and only then it will dispatch the newer messages from 
  * RAM.
  */
-static void main_thread(void* arg);
-
-/**
- * @brief Thread to wait a new TCP connection. As soon
- * as a new client is connected it sends an event to
- * the main thread.
- */
-static void com_thread(void* arg);
+static void server_thread(void* arg);
 
 /**
  * @brief Function to copy a string in a safe way. 
@@ -267,7 +246,7 @@ void queue_put(log_t log, const char* msg)
 
     os_mutex_unlock(queue_lock);
 
-#if _RLOG_DEBUG_QUEUE_        
+#if 0        
         printf("%s \n", msg);
 #endif  
 }
@@ -294,7 +273,7 @@ void queue_putf(log_t log, const char* format,  va_list args)
 
     os_mutex_unlock(queue_lock);
 
-#if _RLOG_DEBUG_QUEUE_        
+#if 0        
         printf("%s \n", msg);
 #endif  
 }
@@ -324,6 +303,42 @@ int queue_get(char* msg)
     return strlen(msg);
 }
 
+static
+int queue_peek(char* msg)
+{
+    log_t log;
+
+    os_mutex_lock(queue_lock);
+
+    if( msg_queue.cnt == 0 )
+    {   
+        os_mutex_unlock(queue_lock); 
+        return 0;
+    }
+
+    log.timestamp = msg_queue.buffer[msg_queue.head].timestamp;
+    log.type = msg_queue.buffer[msg_queue.head].type;
+    fast_strncpy(log.msg, msg_queue.buffer[msg_queue.head].msg, sizeof(msg_queue.buffer[msg_queue.head].msg));
+
+    os_mutex_unlock(queue_lock);
+
+    make_log_string(msg, &log);
+    return strlen(msg);
+}
+
+static
+void queue_next()
+{
+    os_mutex_lock(queue_lock);
+
+    if( msg_queue.cnt > 0 )
+    {   
+        msg_queue.head = (msg_queue.head + 1) % MSG_QUEUE_SIZE;
+        msg_queue.cnt--;
+    }
+
+    os_mutex_unlock(queue_lock);
+}
 
 int rlog_init(const char* filepath, unsigned int size, rlog_ifc_t ifc)
 {
@@ -345,41 +360,39 @@ int rlog_init(const char* filepath, unsigned int size, rlog_ifc_t ifc)
         goto INIT_FAIL;
     }
 
+    // install communication interface
     server_ifc = ifc;
+ 
+    if ( server_ifc.init() != RLOG_COM_OK )
+    {
+        err = -2;
+        goto INIT_FAIL;
+    }
+
     queue_init();
 
     queue_lock = os_mutex_create();
     if( queue_lock == NULL ) {
-        err = -2;
-        goto INIT_FAIL;
-    }
-    lost_conn_sema = os_sem_create(1, 0);
-    if( lost_conn_sema == NULL ) {
         err = -3;
         goto INIT_FAIL;
     }
 
     wakeup_events = os_event_create();        
 
-    main_task_handle = os_thread_create("rlog_main_tsk", main_thread, NULL, RLOG_MAIN_TASK_STACK_SIZE, RLOG_TASK_PRIO);
-    if( main_task_handle == NULL ) {
-        err = -4;
-        goto INIT_FAIL;
-    }
-    
-    com_task_handle = os_thread_create("rlog_com_tsk", com_thread, NULL, RLOG_COM_TASK_STACK_SIZE, RLOG_TASK_PRIO);
-    if( com_task_handle == NULL ) {
-        err = -5;
-        goto INIT_FAIL;
-    }
-
 #if RLOG_DLOG_ENABLE
     if( dlog_open(&logger, filepath, size) != DLOG_OK ) {
-        err = -6;
+        err = -4;
         goto INIT_FAIL;            
     }
 #endif
 
+    thread_handle = os_thread_create("rlog_server", server_thread, NULL, RLOG_MAIN_TASK_STACK_SIZE, RLOG_TASK_PRIO);
+    if( thread_handle == NULL ) {
+        err = -5;
+        goto INIT_FAIL;
+    }
+
+    os_sleep_us(1000);
     return RLOG_OK;
 
 INIT_FAIL:
@@ -428,83 +441,79 @@ rlog_server_stats_t rlog_get_stats(void)
 }
 
 #define SERVER_BANNER "RLOG Server v"RLOG_VERSION " up and running!"
+#define EVENT_TIMEOUT_SEC 1
+#define EVENT_TIMEOUT (EVENT_TIMEOUT_SEC * 1000)
+#define QUEUE_POLLING_PERIOD_US 0
 
 #if RLOG_SEND_HEARTBEAT
-    #define EVENT_TIMEOUT 10
-#else
-    #define EVENT_TIMEOUT OS_WAIT_FOREVER
+    #define HEARTBEAT_PERIOD_TICKS (RLOG_HEARTBEAT_PERIOD_SEC / EVENT_TIMEOUT_SEC)
 #endif
 
 static
-void main_thread(void* arg)
+void log_disconnection(const char* ip)
+{
+    rlogf(RLOG_WARNING, aux_buffer, "[RLOG] Lost connection with %s !", ip);
+}
+
+static
+void server_thread(void* arg)
 {                
     uint32_t evts = 0; 
-    STATES state = STATE_INIT;
+    STATES state = STATE_DISCONNECTED;
     int err = DLOG_OK;
+    int com_err = RLOG_COM_OK;
+    const char* ip = "0.0.0.0";
 
+    rlog(RLOG_INFO, SERVER_BANNER);
     while( 1 )
-    { 
+    {         
         server_status = RLOG_SLEEPING;
         evts = os_event_wait(wakeup_events, EVENTS_MASK, EVENT_TIMEOUT);
         os_event_clear(wakeup_events, evts);
 
         if( !evts )
         {
-#if RLOG_SEND_HEARTBEAT
-            heartbeat_timer++;
-            if( heartbeat_timer > HEARTBEAT_PERIOD_TICKS ) {
-                rlog("RLOG",RLOG_INFO,"Heartbeat");
-                heartbeat_timer = 0;
-            }
-#endif
-        }
-
-        if( evts & EVENT_NEW_CONNECTION )
-        {
-            state = STATE_CONNECTED;
-#if RLOG_DLOG_ENABLE
-            // dump all messages from dlog to rlog-cli
-            do
+            if( state == STATE_CONNECTED ) 
             {
-                err = dlog_get(&logger, msg_buffer, sizeof(msg_buffer));                
-                if ( err == DLOG_OK )
+                #if RLOG_SEND_HEARTBEAT
+                heartbeat_timer++;
+                if( heartbeat_timer > HEARTBEAT_PERIOD_TICKS ) {
+                    rlog(RLOG_INFO,"[RLOG] Heartbeat.. rlog server is still running!");
+                    heartbeat_timer = 0;
+                }
+                #endif                
+            }
+            else if( state == STATE_DISCONNECTED )
+            {
+                com_err = server_ifc.connect(); 
+                if ( com_err == RLOG_COM_NEW_CLIENT ) 
                 {
-                    err = server_ifc.send(msg_buffer, strlen(msg_buffer));
-                    if( err != RLOG_COM_OK )
+                    if( server_ifc.get_cli != NULL ) 
                     {
-#if _RLOG_DEBUG_                    
-
-                        printf("[RLOG] rlog_ifc_t::send() error %d\n", err);
-#endif
-                        os_sem_signal(lost_conn_sema);
-                        state = STATE_DISCONNECTED;
-                        break;
+                        ip = server_ifc.get_cli();
+                        if( ip != NULL ) 
+                        {
+                            snprintf(aux_buffer, sizeof(aux_buffer), "[RLOG] New connection from %s", ip);
+                            rlog(RLOG_INFO, aux_buffer);
+                        }
                     }
-                    os_sleep_us(QUEUE_POLLING_PERIOD_US);                    
-                }
-                else if ( err != DLOG_EMPTY_QUEUE )
+                    state = STATE_DUMPING_LOG;
+                } 
+                else if( com_err != RLOG_COM_NO_CLIENT )
                 {
 #if _RLOG_DEBUG_                    
-                    printf("[RLOG] dlog_get() error %d\n", err);
-#endif
-                }
-
-            server_status = RLOG_DUMPING_DLOG;
-            } while( err == DLOG_OK );
+                    printf("[RLOG] rlog_ifc_t::connect() error: %d \n", com_err);
 #endif            
-        } 
+                }            
+            }
+        }        
 
-        if( evts & EVENT_NEW_MSG )
+        if( evts & EVENT_NEW_MSG ) 
         {
             switch( state )
             {
-                case STATE_INIT:
-                    rlog(RLOG_INFO, SERVER_BANNER);
-                    state = STATE_DISCONNECTED;
-                break;
                 case STATE_DISCONNECTED:
                 {
-                    os_sem_signal(lost_conn_sema);
 #if RLOG_DLOG_ENABLE                                     
                     while( queue_get(msg_buffer) )
                     {
@@ -512,74 +521,67 @@ void main_thread(void* arg)
                         dlog_put(&logger, msg_buffer);    
                         os_sleep_us(QUEUE_POLLING_PERIOD_US);
                     }
-#endif                    
+#endif                
                 }
                 break;
+                case STATE_DUMPING_LOG:
+                {
+                    state = STATE_CONNECTED;
+#if RLOG_DLOG_ENABLE
+                    // dump all messages from dlog to rlog-cli
+                    do
+                    {
+                        err = dlog_get(&logger, msg_buffer, sizeof(msg_buffer));                
+                        if ( err == DLOG_OK )
+                        {
+                            com_err = server_ifc.send(msg_buffer, strlen(msg_buffer));
+                            if( com_err != RLOG_COM_OK )
+                            {
+    #if _RLOG_DEBUG_                            
+                                printf("[RLOG] rlog_ifc_t::send() error %d\n", com_err);
+    #endif
+                                state = STATE_DISCONNECTED;
+                                log_disconnection(ip);
+                                break;
+                            } else {
+                                //dlog_next(&logger);
+                            }                            
+                            os_sleep_us(QUEUE_POLLING_PERIOD_US);                    
+                        }
+                        else if ( err != DLOG_EMPTY_QUEUE )
+                        {
+    #if _RLOG_DEBUG_                    
+                            printf("[RLOG] dlog_get() error %d\n", err);
+    #endif
+                        }
+                        server_status = RLOG_DUMPING_DLOG;
+                    } while( err == DLOG_OK );
+#endif            
+                }
                 case STATE_CONNECTED:
                 {
                     //dispatch all enqueued log messages
                     while( queue_get(msg_buffer) )
                     {
                         server_status = RLOG_DUMPING_RAM_QUEUE;
-                        err = server_ifc.send(msg_buffer,strlen(msg_buffer));
-                        if( err != RLOG_COM_OK )
+                        com_err = server_ifc.send(msg_buffer,strlen(msg_buffer));
+                        if( com_err != RLOG_COM_OK )
                         {
 #if _RLOG_DEBUG_                            
-                            printf("[RLOG] rlog_ifc_t::send() error %d\n", err);
+                            printf("[RLOG] rlog_ifc_t::send() error %d\n", com_err);
 #endif
-                            os_sem_signal(lost_conn_sema);
                             state = STATE_DISCONNECTED;
+                            log_disconnection(ip);
                             break;
+                        } else {
+                            //queue_next();
                         }
                         os_sleep_us(QUEUE_POLLING_PERIOD_US);
                     }
                 }
                 break;
             }    
-        } 
-    }
+        }
+    } 
     server_status = RLOG_DEAD;    
-}
-
-static
-void com_thread(void* arg)
-{
-    const char* ip;
-    int err = 0;
-
-    err = server_ifc.init(); 
-    if ( err != RLOG_COM_OK )
-    {
-#if _RLOG_DEBUG_                    
-        printf("[RLOG] rlog_ifc_t::init() error: %d \n", err);
-#endif
-        return;
-    }
-            
-    while( 1 )
-    {                       
-        err = server_ifc.connect(); 
-        if ( err == RLOG_COM_OK ) 
-        {
-            if( server_ifc.get_cli != NULL ) 
-            {
-                ip = server_ifc.get_cli();
-                if( ip != NULL ) 
-                {
-                    snprintf(aux_buffer, sizeof(aux_buffer), "[RLOG] New connection from %s", ip);
-                    rlog(RLOG_INFO, aux_buffer);
-                }
-            }
-            os_event_set(wakeup_events, EVENT_NEW_CONNECTION);
-            os_sem_wait(lost_conn_sema, OS_WAIT_FOREVER);
-            rlog(RLOG_WARNING,"[RLOG] Lost connection");
-        }
-        else
-        {
-#if _RLOG_DEBUG_                    
-            printf("[RLOG] rlog_ifc_t::connect() error: %d \n", err);
-#endif            
-            os_sleep_us(10 * 1000 /*10ms*/);
-        }
-    }
 }

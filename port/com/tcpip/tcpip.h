@@ -38,7 +38,7 @@
 int rlog_tcp_init();
 
 /**
- * @brief Wait for connection
+ * @brief Check if client has connected. Non blocking function!
  * @return 0 on success, negative number on failure.
  */
 int rlog_tcp_wait_conn();

@@ -57,6 +57,9 @@ int rlog_tcp_init()
     sock_addr.sin_addr.s_addr = INADDR_ANY;
     sock_addr.sin_port = htons( RLOG_TCPIP_PORT );
 
+    int flags = fcntl(socket_fd, F_GETFL, 0);
+    fcntl(socket_fd, F_SETFL, flags | O_NONBLOCK);
+    
     //Bind
 	if(bind(socket_fd,(struct sockaddr *)&sock_addr , sizeof(sock_addr)) < 0)
 	{
@@ -73,7 +76,7 @@ int rlog_tcp_init()
         return -3;
     }
 
-    return 0;
+    return RLOG_COM_OK;
 }
 
 int rlog_tcp_wait_conn()
@@ -88,13 +91,20 @@ int rlog_tcp_wait_conn()
 
     cli_socket_fd = accept(socket_fd, (struct sockaddr *)&client, (socklen_t*)&len);
 
-    if (cli_socket_fd < 0)
+    if (cli_socket_fd < 0) {
+
+        // accept returns EWOULDBLOCK if O_NONBLOCK is set for the socket and no connections are present to be accepted.
+        if( errno == EWOULDBLOCK )
+            return RLOG_COM_NO_CLIENT;
+
+        // anything else assume is error!
         return -2;
+    }
 
     struct in_addr ipAddr = client.sin_addr;
     inet_ntop( AF_INET, &ipAddr, cli_ip, INET_ADDRSTRLEN );
 
-    return 0;
+    return RLOG_COM_NEW_CLIENT;
 }
 
 int rlog_tcp_send(const void* buf, int len)
@@ -111,7 +121,7 @@ int rlog_tcp_send(const void* buf, int len)
     		return -2; //lost connection
     }
 
-    return 0;
+    return RLOG_COM_OK;
 }
 
 int rlog_tcp_recv(void* buf, int len)
