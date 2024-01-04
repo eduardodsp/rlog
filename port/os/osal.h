@@ -111,11 +111,11 @@ void os_event_destroy(os_event_t * event);
  * @return Pointer to timer handle
  */
 os_timer_t * os_timer_create(
-                                uint32_t us,
-                                void (*fn) (os_timer_t * timer, void * arg),
-                                void * arg,
-                                bool oneshot
-                                );
+                            uint32_t us,
+                            void (*fn) (os_timer_t * timer, void * arg),
+                            void * arg,
+                            bool oneshot
+                            );
 
 /**
  * @brief Start a timer

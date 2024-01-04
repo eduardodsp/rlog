@@ -148,23 +148,20 @@ rlog_server_stats_t rlog_get_stats(void);
  * @brief Initialize interface structure. See \ref rlog_ifc_t for more details
  * 
  * @param ifc Pointer to interface descriptor strucutre
- * @param usr_init Function pointer to intialize communication interface
- * @param usr_connect Function pointer wait for client connection
- * @param usr_send Function pointer send messages to the client.
- * @param usr_get_cli  Function pointer to get a string with information about the client
+ * @param ifc_init Function pointer to intialize communication interface
+ * @param ifc_poll Function pointer wait for client connection
+ * @param ifc_send Function pointer send messages to the client.
  */
 inline void rlog_init_interface( 
     rlog_ifc_t* ifc, 
-    int (*usr_init)(void),
-    int (*usr_connect)(void),
-    int (*usr_send)(const void* buf, int len),
-    const char* (*usr_get_cli)(void) 
+    bool (*ifc_init)(void),
+    bool (*ifc_poll)(void),
+    bool (*ifc_send)(const void* buf, int len)
     )
 {
-    ifc->init       = usr_init;
-    ifc->connect    = usr_connect;
-    ifc->send       = usr_send;
-    ifc->get_cli    = usr_get_cli;
+    ifc->init = ifc_init;
+    ifc->poll = ifc_poll;
+    ifc->send = ifc_send;
 }
 
 #endif //_RLOG_H_
