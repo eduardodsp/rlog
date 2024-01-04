@@ -1,46 +1,41 @@
 #ifndef _PORT_COM_INTERFACES_H_
 #define _PORT_COM_INTERFACES_H_
 
-#define RLOG_COM_OK 0
+#include <stdbool.h>
 
 /**
  * @brief Set of callbacks to enable communication between client and server.
  * Can be used to define APIs for communuicating via arbitrary protocols, such as
  * CAN, SPI, UART, TCP/IP ...
- * 
  */
 typedef struct rlog_ifc_s
 {
     /**
      * @brief Function pointer to intialize communication interface
-     * @return RLOG_COM_OK on success, user defined error code on failure.
+     * @return true if succesfully initialzied the communication interface. 
+     * @return false if failed.
      */
-    int (*init)(void);
+    bool (*init)(void);
 
     /**
-     * @brief Function pointer wait for client connection. This can be a blocking function
-     * waiting for a client connection if using a connection oriented protocol. If using a 
-     * connection-less protocol this function can return immediately.
-     * @return RLOG_COM_OK if successfully connected to client, user defined error code on failure.
+     * @brief Pointer to a non-blocking function to check if there is a link with a client. 
+     * Example: If interface is a connection oriented protocol (i.e TCP), it could be 
+     * used to accept new connections on a non-blocking socket, or if is connectionless 
+     * (i.e UDP, UART etc.) it could be used to wait for a client request or to send a ping.
+     * @return true if found a client to send logs to
+     * @return false if there is no client to send logs to
      */
-    int (*connect)(void);
+    bool (*poll)(void);
 
     /**
-     * @brief Send data to the client.
+     * @brief Pointer to a non-blocking function to send log messages to the client.
      * 
      * @param buf Buffer holding the message to be sent
      * @param len Length of the message in bytes
-     * @return RLOG_COM_OK on success, user defined error code on failure.
+     * @return true if successfully sent the log
+     * @return false if failed to send the log
      */
-    int (*send)(const void* buf, int len);
-
-    /**
-     * @brief Get a string with client information
-     * @return Pointer to constant string containing information about the client. It could be an IP address
-     * or any other meaningful string.
-     * May return NULL if no information is to be provided.
-     */
-    const char* (*get_cli)(void);
+    bool (*send)(const void* buf, int len);
 
 }rlog_ifc_t;
 

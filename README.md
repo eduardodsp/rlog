@@ -27,13 +27,9 @@ I wrote this to help me monitor the status of devices on my other projects. Some
     // Initialize network interface...
     
     // Initialize RLOG server and set up the backup file
-    int t_err = rlog_init("/spiffs/rlog.log", 40, RLOG_DEFAULT_TCPIP);
-    if(t_err == RLOG_OK) {
+    if( rlog_init("/spiffs/rlog.log", 40, RLOG_DEFAULT_TCPIP) ) {
         // Log an INFO message
         rlog(RLOG_INFO,"HELLO WORLD!");
-    }
-    else {
-        printf("RLOG init failed, error: %d \n", t_err);
     }
 ```
 ## Portability layer
