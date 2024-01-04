@@ -31,7 +31,14 @@
 #include "port/os/osal.h"
 #include "format.h"
 
-#define _RLOG_DEBUG_ 0
+#define _RLOG_DEBUG_    0
+#define _RLOG_DPRINTF_  1
+
+#if _RLOG_DPRINTF_
+#define DPRINTF(...) printf(__VA_ARGS__)
+#else
+#define DPRINTF(...)
+#endif
 
 #define RLOG_MAIN_TASK_STACK_SIZE 4096
 #define RLOG_TASK_PRIO 8
@@ -55,7 +62,7 @@
  */
 #if RLOG_SEND_HEARTBEAT
     #ifndef RLOG_HEARTBEAT_PERIOD_SEC
-        #define RLOG_HEARTBEAT_PERIOD_SEC 5
+        #define RLOG_HEARTBEAT_PERIOD_SEC 3600 /* 1h */
     #endif
 #endif
 
@@ -87,11 +94,6 @@ static struct queue_s   msg_queue;
  * @brief  Message buffer
  */
 static char msg_buffer[MSG_MAX_SIZE_CHAR] = { 0 };
-
-/**
- * @brief Server status
- */
-static RLOG_STATUS server_status = RLOG_DEAD;
 
 /**
  * @brief Heartbeat timer counter
@@ -157,19 +159,6 @@ static void queue_putf(log_t log, const char* format,  va_list args);
 static int  queue_get(char* msg);
 
 /**
- * @brief Reads a message from the queue without removing it
- * 
- * @param msg Buffer to hold the null-terminated string
- * @return Length of the received message 
- */
-static int queue_peek(char* msg);
-
-/**
- * @brief Removes a message from the queue.
- */
-static void queue_next(void);
-
-/**
  * @brief Main thread to receive new log messages and dispatch
  * to the remote client if connected, or to a backup file if
  * disconnected from client. As soon as a new client connects to
@@ -216,47 +205,52 @@ void queue_init(void)
 static
 void queue_put(log_t log, const char* msg)
 {
+    bool full = false;
     os_mutex_lock(queue_lock);
 
-    if( msg_queue.cnt < MSG_QUEUE_SIZE )
+    if( msg_queue.cnt < MSG_QUEUE_SIZE ) {
         msg_queue.cnt++;
-    else
+    } else {
         msg_queue.ovf++;
+        full = true;
+    }
 
     msg_queue.buffer[msg_queue.tail].timestamp = log.timestamp;
     msg_queue.buffer[msg_queue.tail].type = log.type;
     fast_strncpy(msg_queue.buffer[msg_queue.tail].msg, msg, sizeof(msg_queue.buffer[msg_queue.tail].msg));
+
+    if( (msg_queue.tail == msg_queue.head) && full )
+        msg_queue.head = (msg_queue.head + 1) % MSG_QUEUE_SIZE;
+
     msg_queue.tail = (msg_queue.tail + 1) % MSG_QUEUE_SIZE;
     
     os_mutex_unlock(queue_lock);
-
-#if 0        
-        printf("%s \n", msg);
-#endif  
 }
 
 static
 void queue_putf(log_t log, const char* format,  va_list args)
 {
+    bool full = false;
+
     os_mutex_lock(queue_lock);
 
-    if( msg_queue.cnt < MSG_QUEUE_SIZE )
+    if( msg_queue.cnt < MSG_QUEUE_SIZE ) {
         msg_queue.cnt++;
-    else
+    } else {
         msg_queue.ovf++;
-
+        full = true;
+    }
     msg_queue.buffer[msg_queue.tail].timestamp = log.timestamp;
     msg_queue.buffer[msg_queue.tail].type = log.type;
     
     vsnprintf(msg_queue.buffer[msg_queue.tail].msg, sizeof(msg_queue.buffer[msg_queue.tail].msg), format, args);
 
+    if( (msg_queue.tail == msg_queue.head) && full )
+         msg_queue.head = (msg_queue.head + 1) % MSG_QUEUE_SIZE;
+
     msg_queue.tail = (msg_queue.tail + 1) % MSG_QUEUE_SIZE;
     
     os_mutex_unlock(queue_lock);
-
-#if 0        
-        printf("%s \n", msg);
-#endif  
 }
 
 static
@@ -284,60 +278,20 @@ int queue_get(char* msg)
     return strlen(msg);
 }
 
-static
-int queue_peek(char* msg)
+bool rlog_init(const char* filepath, unsigned int size, rlog_ifc_t ifc)
 {
-    log_t log;
-
-    os_mutex_lock(queue_lock);
-
-    if( msg_queue.cnt == 0 )
-    {   
-        os_mutex_unlock(queue_lock); 
-        return 0;
-    }
-
-    log.timestamp = msg_queue.buffer[msg_queue.head].timestamp;
-    log.type = msg_queue.buffer[msg_queue.head].type;
-    fast_strncpy(log.msg, msg_queue.buffer[msg_queue.head].msg, sizeof(msg_queue.buffer[msg_queue.head].msg));
-
-    os_mutex_unlock(queue_lock);
-
-    make_log_string(msg, &log);
-    return strlen(msg);
-}
-
-static
-void queue_next()
-{
-    os_mutex_lock(queue_lock);
-
-    if( msg_queue.cnt > 0 )
-    {   
-        msg_queue.head = (msg_queue.head + 1) % MSG_QUEUE_SIZE;
-        msg_queue.cnt--;
-    }
-
-    os_mutex_unlock(queue_lock);
-}
-
-int rlog_init(const char* filepath, unsigned int size, rlog_ifc_t ifc)
-{
-    int err = 0;
-    server_status = RLOG_INTIALIZING;
-
     if(ifc.poll == NULL) {
-        err = -1;
+        DPRINTF("[RLOG] rlog_init failed. Invalid parameter\n");
         goto INIT_FAIL;
     }
 
     if(ifc.init == NULL) {
-        err = -1;
+        DPRINTF("[RLOG] rlog_init failed. Invalid parameter\n");
         goto INIT_FAIL;
     }
 
     if(ifc.send == NULL) {
-        err = -1;
+        DPRINTF("[RLOG] rlog_init failed. Invalid parameter\n");
         goto INIT_FAIL;
     }
 
@@ -346,7 +300,7 @@ int rlog_init(const char* filepath, unsigned int size, rlog_ifc_t ifc)
  
     if ( !server_ifc.init() )
     {
-        err = -2;
+        DPRINTF("[RLOG] rlog_init failed to initialize communication interface\n");
         goto INIT_FAIL;
     }
 
@@ -354,31 +308,31 @@ int rlog_init(const char* filepath, unsigned int size, rlog_ifc_t ifc)
 
     queue_lock = os_mutex_create();
     if( queue_lock == NULL ) {
-        err = -3;
+        DPRINTF("[RLOG] rlog_init failed to create mutex\n");
         goto INIT_FAIL;
     }
 
     wakeup_events = os_event_create();        
 
 #if RLOG_DLOG_ENABLE
-    if( dlog_open(&logger, filepath, size) != DLOG_OK ) {
-        err = -4;
+    int err = dlog_open(&logger, filepath, size);
+    if( err != DLOG_OK ) {
+        DPRINTF("[RLOG] rlog_init failed to open dlog. DLOG error %d\n", err);
         goto INIT_FAIL;            
     }
 #endif
 
     thread_handle = os_thread_create("rlog_server", server_thread, NULL, RLOG_MAIN_TASK_STACK_SIZE, RLOG_TASK_PRIO);
     if( thread_handle == NULL ) {
-        err = -5;
+        DPRINTF("[RLOG] rlog_init failed to create thread\n");
         goto INIT_FAIL;
     }
 
     os_sleep_us(1000);
-    return RLOG_OK;
+    return true;
 
 INIT_FAIL:
-    server_status = RLOG_DEAD;
-    return err;    
+    return false;    
 }
 
 void rlog(RLOG_TYPE type, const char* msg)
@@ -407,19 +361,34 @@ void rlogf(RLOG_TYPE type, const char* format, ...)
     os_event_set(wakeup_events, EVENT_NEW_MSG);
 }
 
-rlog_server_stats_t rlog_get_stats(void)
+#if _RLOG_DEBUG_   
+static
+void rlog_print_dbg_stats()
 {
-    rlog_server_stats_t stats;
+ 
+    // frequency divider so not to pollute stdout
+    static uint32_t dbg_ctr = 0;
 
+    uint32_t    queue_ovf;
+    uint32_t    queue_cnt;
+    uint32_t    queue_max_cnt;
+
+    if( dbg_ctr++ < 50)
+        return;
+
+    dbg_ctr = 0;
     os_mutex_lock(queue_lock);
-    stats.status    = server_status;
-    stats.queue_ovf = msg_queue.ovf;
-    stats.queue_cnt = msg_queue.cnt;
-    stats.queue_max_cnt = msg_queue.max_cnt;    
+    queue_ovf = msg_queue.ovf;
+    queue_cnt = msg_queue.cnt;
+    queue_max_cnt = msg_queue.max_cnt;    
     os_mutex_unlock(queue_lock);
 
-    return stats;
+    DPRINTF("[RLOG] Queue overflows: %d\n", queue_ovf);
+    DPRINTF("[RLOG] Queue count: %d\n", queue_cnt);
+    DPRINTF("[RLOG] Queue watermark: %d\n", queue_max_cnt);
+
 }
+#endif
 
 #define SERVER_BANNER "RLOG Server v"RLOG_VERSION " up and running!"
 #define EVENT_TIMEOUT_SEC 1
@@ -456,12 +425,10 @@ void dump_queue_to_remote()
     //dispatch all enqueued log messages
     while( queue_get(msg_buffer) )
     {        
-        if( server_ifc.send(msg_buffer,strlen(msg_buffer)) )
-        { 
-            //queue_next(&logger); 
-        }
-        else
+        if( !server_ifc.send(msg_buffer,strlen(msg_buffer)) )
         {
+            // failed to send, put it on dlog for later
+            dlog_put(&logger, msg_buffer);
             break;
         }           
         os_sleep_us(QUEUE_POLLING_PERIOD_US);
@@ -519,5 +486,9 @@ void server_thread(void* arg)
         {
             dump_queue_to_dlog();
         }
+
+#if _RLOG_DEBUG_
+        rlog_print_dbg_stats();
+#endif
     } 
 }

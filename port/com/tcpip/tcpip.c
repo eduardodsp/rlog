@@ -35,6 +35,9 @@
 
 #if TCPIP_DBG
 #include <stdio.h>
+#define DBG_PRINTF(...) printf(__VA_ARGS__)
+#else
+#define DBG_PRINTF(...)
 #endif
 
 
@@ -82,9 +85,7 @@ bool rlog_tcp_init()
 
     if(socket_fd == -1) 
     {
-        #if TCPIP_DBG
-        printf("[RLOG] rlog_tcp_init::socket() failed %d\n", errno);
-        #endif
+        DBG_PRINTF("[RLOG] rlog_tcp_init::socket() failed %d\n", errno);
         return false;
     }
 
@@ -98,10 +99,7 @@ bool rlog_tcp_init()
     //Bind
 	if(bind(socket_fd,(struct sockaddr *)&sock_addr , sizeof(sock_addr)) < 0)
 	{
-        #if TCPIP_DBG
-        printf("[RLOG] rlog_tcp_init::bind() failed %d\n", errno);
-        #endif
-
+        DBG_PRINTF("[RLOG] rlog_tcp_init::bind() failed %d\n", errno);
         close(socket_fd);
         socket_fd = -1;
 		return false;
@@ -110,10 +108,7 @@ bool rlog_tcp_init()
     // Now server is ready to listen and verification
     if ((listen(socket_fd, 1)) != 0)
     {
-        #if TCPIP_DBG
-        printf("[RLOG] rlog_tcp_init::listen() failed %d\n", errno);
-        #endif
-
+        DBG_PRINTF("[RLOG] rlog_tcp_init::listen() failed %d\n", errno);
         close(socket_fd);
         socket_fd = -1;
         return false;
@@ -140,14 +135,12 @@ bool rlog_tcp_poll()
 
     if (cli_socket_fd < 0) 
     {
-        #if TCPIP_DBG
         // accept returns EWOULDBLOCK if O_NONBLOCK is set for the socket and no connections are present to be accepted
         // so thats not an actual error
-        if( errno != EWOULDBLOCK )
-            printf("[RLOG] rlog_tcp_poll::accept() failed %d\n", errno);
-
-        #endif
-
+        if( errno != EWOULDBLOCK ) {
+            DBG_PRINTF("[RLOG] rlog_tcp_poll::accept() failed %d\n", errno);
+        }
+        
         return false;
     }
 
@@ -168,10 +161,7 @@ bool rlog_tcp_send(const void* buf, int len)
 
     if(ret == -1)
     {
-        #if TCPIP_DBG
-        printf("[RLOG] rlog_tcp_send::send() failed %d\n", errno);
-        #endif
-
+        DBG_PRINTF("[RLOG] rlog_tcp_send::send() failed %d\n", errno);
         cli_socket_fd = -1;
         rlogf(RLOG_WARNING, "[RLOG] Lost connection from %s", cli_ip);
         return false; //lost connection
