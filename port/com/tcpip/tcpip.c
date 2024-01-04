@@ -31,9 +31,11 @@
 #include "../../os/osal.h"
 #include "../../../rlog.h"
 
-#define TCPIP_DBG 0
+#ifndef _RLOG_TCPIP_DBG_
+    #define _RLOG_TCPIP_DBG_ 0
+#endif
 
-#if TCPIP_DBG
+#if _RLOG_TCPIP_DBG_
 #include <stdio.h>
 #define DBG_PRINTF(...) printf(__VA_ARGS__)
 #else
@@ -140,7 +142,7 @@ bool rlog_tcp_poll()
         if( errno != EWOULDBLOCK ) {
             DBG_PRINTF("[RLOG] rlog_tcp_poll::accept() failed %d\n", errno);
         }
-        
+
         return false;
     }
 

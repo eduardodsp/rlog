@@ -31,49 +31,64 @@
 #include "port/os/osal.h"
 #include "format.h"
 
-#define _RLOG_DEBUG_    0
-#define _RLOG_DPRINTF_  1
-
-#if _RLOG_DPRINTF_
-#define DPRINTF(...) printf(__VA_ARGS__)
-#else
-#define DPRINTF(...)
+#ifndef _RLOG_DBG_
+    #define _RLOG_DBG_    0
 #endif
 
-#define RLOG_MAIN_TASK_STACK_SIZE 4096
-#define RLOG_TASK_PRIO 8
+#ifndef _RLOG_PRINTF_
+    #define _RLOG_PRINTF_  1
+#endif
+
+#if _RLOG_PRINTF_
+#define DBG_PRINTF(...) printf(__VA_ARGS__)
+#else
+#define DBG_PRINTF(...)
+#endif
 
 /**
- * @brief User defined log message queue size
+ * @brief Rlog thread stack size. Default 4096
  */
-#ifndef RLOG_MSG_QUEUE_SIZE
-    #define RLOG_MSG_QUEUE_SIZE 10
+#ifndef RLOG_STACK_SIZE
+    #define RLOG_STACK_SIZE 4096
+#endif
+
+/**
+ * @brief Rlog thread priority. Default 8
+ */
+#ifndef RLOG_TASK_PRIO
+    #define RLOG_TASK_PRIO 8
+#endif
+
+/**
+ * @brief Message queue size. Default 10
+ */
+#ifndef RLOG_QUEUE_SIZE
+    #define RLOG_QUEUE_SIZE 10
 #endif
 
 /**
  * @brief Enable (1) or disable (0) the sending of periodic heartbeat messages
  */
-#ifndef RLOG_SEND_HEARTBEAT
-    #define RLOG_SEND_HEARTBEAT 1
+#ifndef RLOG_HEARTBEAT
+    #define RLOG_HEARTBEAT 1
 #endif
 
 /**
  * @brief User defined heartbeat period in seconds
  */
-#if RLOG_SEND_HEARTBEAT
+#if RLOG_HEARTBEAT
     #ifndef RLOG_HEARTBEAT_PERIOD_SEC
         #define RLOG_HEARTBEAT_PERIOD_SEC 3600 /* 1h */
     #endif
 #endif
 
-#define MSG_QUEUE_SIZE RLOG_MSG_QUEUE_SIZE
+#define MSG_QUEUE_SIZE RLOG_QUEUE_SIZE
 
 #define EVENT_NEW_MSG           ( 1 << 0 )
 #define EVENTS_MASK             ( EVENT_NEW_MSG )
 
 /**
  * @brief Ring buffer implementation
- * using queue
  */
 struct queue_s
 {
@@ -98,7 +113,7 @@ static char msg_buffer[MSG_MAX_SIZE_CHAR] = { 0 };
 /**
  * @brief Heartbeat timer counter
  */
-#if RLOG_SEND_HEARTBEAT
+#if RLOG_HEARTBEAT
 static int  heartbeat_timer = 0;
 #endif
 
@@ -118,9 +133,9 @@ static os_mutex_t*  queue_lock;
 static os_event_t* wakeup_events;
 
 /**
- * @brief Communication used by the server
+ * @brief Communication interface used by the server
  */
-static rlog_ifc_t server_ifc;
+static rlog_ifc_t com;
 
 #if RLOG_DLOG_ENABLE
 /**
@@ -281,26 +296,26 @@ int queue_get(char* msg)
 bool rlog_init(const char* filepath, unsigned int size, rlog_ifc_t ifc)
 {
     if(ifc.poll == NULL) {
-        DPRINTF("[RLOG] rlog_init failed. Invalid parameter\n");
+        DBG_PRINTF("[RLOG] rlog_init failed. Invalid parameter\n");
         goto INIT_FAIL;
     }
 
     if(ifc.init == NULL) {
-        DPRINTF("[RLOG] rlog_init failed. Invalid parameter\n");
+        DBG_PRINTF("[RLOG] rlog_init failed. Invalid parameter\n");
         goto INIT_FAIL;
     }
 
     if(ifc.send == NULL) {
-        DPRINTF("[RLOG] rlog_init failed. Invalid parameter\n");
+        DBG_PRINTF("[RLOG] rlog_init failed. Invalid parameter\n");
         goto INIT_FAIL;
     }
 
     // install communication interface
-    server_ifc = ifc;
+    com = ifc;
  
-    if ( !server_ifc.init() )
+    if ( !com.init() )
     {
-        DPRINTF("[RLOG] rlog_init failed to initialize communication interface\n");
+        DBG_PRINTF("[RLOG] rlog_init failed to initialize communication interface\n");
         goto INIT_FAIL;
     }
 
@@ -308,7 +323,7 @@ bool rlog_init(const char* filepath, unsigned int size, rlog_ifc_t ifc)
 
     queue_lock = os_mutex_create();
     if( queue_lock == NULL ) {
-        DPRINTF("[RLOG] rlog_init failed to create mutex\n");
+        DBG_PRINTF("[RLOG] rlog_init failed to create mutex\n");
         goto INIT_FAIL;
     }
 
@@ -317,14 +332,14 @@ bool rlog_init(const char* filepath, unsigned int size, rlog_ifc_t ifc)
 #if RLOG_DLOG_ENABLE
     int err = dlog_open(&logger, filepath, size);
     if( err != DLOG_OK ) {
-        DPRINTF("[RLOG] rlog_init failed to open dlog. DLOG error %d\n", err);
+        DBG_PRINTF("[RLOG] rlog_init failed to open dlog. DLOG error %d\n", err);
         goto INIT_FAIL;            
     }
 #endif
 
-    thread_handle = os_thread_create("rlog_server", server_thread, NULL, RLOG_MAIN_TASK_STACK_SIZE, RLOG_TASK_PRIO);
+    thread_handle = os_thread_create("rlog_server", server_thread, NULL, RLOG_STACK_SIZE, RLOG_TASK_PRIO);
     if( thread_handle == NULL ) {
-        DPRINTF("[RLOG] rlog_init failed to create thread\n");
+        DBG_PRINTF("[RLOG] rlog_init failed to create thread\n");
         goto INIT_FAIL;
     }
 
@@ -361,7 +376,7 @@ void rlogf(RLOG_TYPE type, const char* format, ...)
     os_event_set(wakeup_events, EVENT_NEW_MSG);
 }
 
-#if _RLOG_DEBUG_   
+#if _RLOG_DBG_   
 static
 void rlog_print_dbg_stats()
 {
@@ -383,9 +398,9 @@ void rlog_print_dbg_stats()
     queue_max_cnt = msg_queue.max_cnt;    
     os_mutex_unlock(queue_lock);
 
-    DPRINTF("[RLOG] Queue overflows: %d\n", queue_ovf);
-    DPRINTF("[RLOG] Queue count: %d\n", queue_cnt);
-    DPRINTF("[RLOG] Queue watermark: %d\n", queue_max_cnt);
+    DBG_PRINTF("[RLOG] Queue overflows: %d\n", queue_ovf);
+    DBG_PRINTF("[RLOG] Queue count: %d\n", queue_cnt);
+    DBG_PRINTF("[RLOG] Queue watermark: %d\n", queue_max_cnt);
 
 }
 #endif
@@ -395,7 +410,7 @@ void rlog_print_dbg_stats()
 #define EVENT_TIMEOUT (EVENT_TIMEOUT_SEC * 1000)
 #define QUEUE_POLLING_PERIOD_US 0
 
-#if RLOG_SEND_HEARTBEAT
+#if RLOG_HEARTBEAT
     #define HEARTBEAT_PERIOD_TICKS (RLOG_HEARTBEAT_PERIOD_SEC / EVENT_TIMEOUT_SEC)
 #endif
 
@@ -406,7 +421,7 @@ void dump_dlog_to_remote()
     //dispatch all enqueued log messages
     while( dlog_peek(&logger, msg_buffer, sizeof(msg_buffer)) )
     {        
-        if( server_ifc.send(msg_buffer, strlen(msg_buffer)) ) 
+        if( com.send(msg_buffer, strlen(msg_buffer)) ) 
         { 
             dlog_next(&logger); 
         }
@@ -425,7 +440,7 @@ void dump_queue_to_remote()
     //dispatch all enqueued log messages
     while( queue_get(msg_buffer) )
     {        
-        if( !server_ifc.send(msg_buffer,strlen(msg_buffer)) )
+        if( !com.send(msg_buffer,strlen(msg_buffer)) )
         {
             // failed to send, put it on dlog for later
             dlog_put(&logger, msg_buffer);
@@ -450,7 +465,7 @@ void dump_queue_to_dlog()
 static
 void send_heartbeat(void)
 {
-#if RLOG_SEND_HEARTBEAT
+#if RLOG_HEARTBEAT
     heartbeat_timer++;
     if( heartbeat_timer > HEARTBEAT_PERIOD_TICKS ) 
     {
@@ -471,7 +486,7 @@ void server_thread(void* arg)
         evts = os_event_wait(wakeup_events, EVENTS_MASK, EVENT_TIMEOUT);
         os_event_clear(wakeup_events, evts);
 
-        if( server_ifc.poll() )
+        if( com.poll() )
         {
             // check backlog
             dump_dlog_to_remote();
@@ -487,7 +502,7 @@ void server_thread(void* arg)
             dump_queue_to_dlog();
         }
 
-#if _RLOG_DEBUG_
+#if _RLOG_DBG_
         rlog_print_dbg_stats();
 #endif
     } 
