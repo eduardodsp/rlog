@@ -98,7 +98,6 @@ bool rlog_tcp_init()
     int flags = fcntl(socket_fd, F_GETFL, 0);
     fcntl(socket_fd, F_SETFL, flags | O_NONBLOCK);
     
-    //Bind
 	if(bind(socket_fd,(struct sockaddr *)&sock_addr , sizeof(sock_addr)) < 0)
 	{
         DBG_PRINTF("[RLOG] rlog_tcp_init::bind() failed %d\n", errno);
@@ -107,7 +106,6 @@ bool rlog_tcp_init()
 		return false;
 	}
 
-    // Now server is ready to listen and verification
     if ((listen(socket_fd, 1)) != 0)
     {
         DBG_PRINTF("[RLOG] rlog_tcp_init::listen() failed %d\n", errno);
@@ -123,33 +121,51 @@ bool rlog_tcp_poll()
 {
     int len;
     struct sockaddr_in client;
+    int fd = -1;
 
-    // check if still connected
-    if( cli_socket_fd > 0)
-        return true;
-
-    if(socket_fd < 0)
+    if( socket_fd < 0 )
         return false;
 
     len = sizeof(client);
+    fd = accept(socket_fd, (struct sockaddr *)&client, (socklen_t*)&len);
 
-    cli_socket_fd = accept(socket_fd, (struct sockaddr *)&client, (socklen_t*)&len);
+	if( fd > 0 )
+	{
+		// accept was successful		
+		if( cli_socket_fd > 0 )
+		{
+			// previous connection was not closed properly so lets signal that we lost 
+			// the previous connection
+			rlogf(RLOG_WARNING, "[RLOG] Lost connection from %s", cli_ip);
+		}
+		
+		// assume new client
+		cli_socket_fd = fd;
+		struct in_addr ipAddr = client.sin_addr;
+		inet_ntop( AF_INET, &ipAddr, cli_ip, INET_ADDRSTRLEN );
+		rlogf(RLOG_INFO, "[RLOG] New connection from %s", cli_ip);
+		return true;		
+	}
 
-    if (cli_socket_fd < 0) 
+    // if it got to here its because accept failed, let's see why...		
+    if( cli_socket_fd == -1 )
     {
-        // accept returns EWOULDBLOCK if O_NONBLOCK is set for the socket and no connections are present to be accepted
-        // so thats not an actual error
+        // we have no client connected at the moment, so either theres a system error or no one is trying to connect.
+        // lets see if its an error...
+
+        // accept() returns EWOULDBLOCK if O_NONBLOCK is set for the socket and no connections are present to be accepted
+        // so thats not an actual error, let's see if its something else
         if( errno != EWOULDBLOCK ) {
+
+            // something went terribly wrong, print!
             DBG_PRINTF("[RLOG] rlog_tcp_poll::accept() failed %d\n", errno);
         }
 
+        // nothing to do here..
         return false;
     }
-
-    struct in_addr ipAddr = client.sin_addr;
-    inet_ntop( AF_INET, &ipAddr, cli_ip, INET_ADDRSTRLEN );
-
-    rlogf(RLOG_INFO, "[RLOG] New connection from %s", cli_ip);
+    
+    // if it got to here its because we already have a client connected, so carry on..
     return true;
 }
 
