@@ -18,12 +18,13 @@ typedef struct rlog_ifc_s
     bool (*init)(void);
 
     /**
-     * @brief Pointer to a non-blocking function to check if there is a link with a client. 
+     * @brief Pointer to a non-blocking function to check if there is at leat 1 client waiting
+     * to be served. 
      * Example: If interface is a connection oriented protocol (i.e TCP), it could be 
      * used to accept new connections on a non-blocking socket, or if is connectionless 
      * (i.e UDP, UART etc.) it could be used to wait for a client request or to send a ping.
-     * @return true if found a client to send logs to
-     * @return false if there is no client to send logs to
+     * @return true if found at least one client to send logs to
+     * @return false if there are no clients to send logs to
      */
     bool (*poll)(void);
 
@@ -32,8 +33,7 @@ typedef struct rlog_ifc_s
      * 
      * @param buf Buffer holding the message to be sent
      * @param len Length of the message in bytes
-     * @return true if successfully sent the log
-     * @return false if failed to send the log
+     * @return true if successfully sent the log to at least one client
      */
     bool (*send)(const void* buf, int len);
 

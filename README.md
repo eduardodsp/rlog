@@ -11,6 +11,7 @@ I wrote this to help me monitor the status of devices on my other projects. Some
     - Portable, since I will be using on other projects.
     - Support for persistence file when no client is connected.
     - Support for multiple communication protocols including user defined protocols.
+    - Support for multiple TCP clients when using the RLOG_DEFAULT_TCPIP interface.
 
 ## Supported Platforms
 |   OS          | Target          | Status          |
@@ -54,5 +55,4 @@ port/
     - Improve API documentation.
     - Support for RFC-6587 (Syslog over TCP).
     - CRC check for persistence file.
-    - Add multiclient support. This is a must.
-    - Port to other popular platforms depending on my needs.
+    - Port to other platforms depending on my needs.
