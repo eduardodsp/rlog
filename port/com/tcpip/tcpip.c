@@ -22,6 +22,7 @@
  */
 
 #include <stdlib.h>
+#include <string.h>
 
 #include "lwip/err.h"
 #include "lwip/sockets.h"
@@ -32,7 +33,7 @@
 #include "../../../rlog.h"
 
 #ifndef _RLOG_TCPIP_DBG_
-    #define _RLOG_TCPIP_DBG_ 0
+    #define _RLOG_TCPIP_DBG_ 1
 #endif
 
 #if _RLOG_TCPIP_DBG_
@@ -42,33 +43,41 @@
 #define DBG_PRINTF(...)
 #endif
 
+/**
+ * @brief RLOG protocol TCP Port 
+ */
+#ifndef RLOG_TCPIP_PORT
+    #define RLOG_TCPIP_PORT  8888
+#endif
 
 /**
- * @brief User defined RLOG protocol TCP Port 
+ * @brief Max number of TCP clients allowed.
  */
-#define RLOG_TCPIP_PORT  8888
+#ifndef RLOG_TCPIP_MAX_CLI
+    #define RLOG_TCPIP_MAX_CLI 2
+#endif
 
 /**
  * @brief Initialize server TCP socket
- * @return 0 on success, negative number on failure.
+ * @return true if TCP socket is ready and listening
  */
 bool rlog_tcp_init(void);
 
 /**
- * @brief Check if client has connected. Non blocking function!
- * @return 0 on success, negative number on failure.
+ * @brief Check if at least one client has connected and test all connections. 
+ * Non blocking function!
+ * @return true if there is at least one client connected.
  */
 bool rlog_tcp_poll(void);
 
 /**
- * @brief Send data to TCP client
+ * @brief Send data to all connected TCP clients
  * 
  * @param buf Buffer holding the message to be sent
  * @param len Length of the message in bytes
- * @return 0 on success, negative number on failure.
+ * @return true if was able to send a message to at least one client 
  */
 bool rlog_tcp_send(const void* buf, int len);
-
 
 rlog_ifc_t rlog_default_tcpip_ifc = {
     .init       = &rlog_tcp_init,
@@ -76,46 +85,87 @@ rlog_ifc_t rlog_default_tcpip_ifc = {
     .send       = &rlog_tcp_send,
 };
 
-static int socket_fd = -1;
-static int cli_socket_fd = -1;
-static char cli_ip[INET_ADDRSTRLEN] = "";
+typedef struct rlog_tcp_cli_t
+{
+	int socket;
+	struct in_addr ip;
+	char ip_str[INET_ADDRSTRLEN];
+	
+}rlog_tcp_cli_t;
+
+static int server_socket = -1;
 static struct sockaddr_in sock_addr = { 0 };
+static rlog_tcp_cli_t cli[RLOG_TCPIP_MAX_CLI];
+
 
 bool rlog_tcp_init()
-{
-    socket_fd = socket(AF_INET , SOCK_STREAM , 0);
+{	
+	for (int i=0; i < RLOG_TCPIP_MAX_CLI; i++)
+	{			
+		cli[i].socket = -1;
+		strcpy(cli[i].ip_str, "0.0.0.0");
+	}
+	
+    server_socket = socket(AF_INET , SOCK_STREAM , 0);
 
-    if(socket_fd == -1) 
+    if(server_socket == -1) 
     {
         DBG_PRINTF("[RLOG] rlog_tcp_init::socket() failed %d\n", errno);
         return false;
     }
 
+    //set server socket to allow multiple connections,  
+    //this is just a good habit, it will work without this  
+    int opt = 1;   
+    if( setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) < 0 )   
+    {   
+        DBG_PRINTF("[RLOG] rlog_tcp_init::bind() failed %d\n", errno);
+        close(server_socket);
+        server_socket = -1;
+		return false;   
+    }  
+
     sock_addr.sin_family = AF_INET;
     sock_addr.sin_addr.s_addr = INADDR_ANY;
     sock_addr.sin_port = htons( RLOG_TCPIP_PORT );
 
-    int flags = fcntl(socket_fd, F_GETFL, 0);
-    fcntl(socket_fd, F_SETFL, flags | O_NONBLOCK);
+    int flags = fcntl(server_socket, F_GETFL, 0);
+    fcntl(server_socket, F_SETFL, flags | O_NONBLOCK);
     
-	if(bind(socket_fd,(struct sockaddr *)&sock_addr , sizeof(sock_addr)) < 0)
+	if(bind(server_socket,(struct sockaddr *)&sock_addr , sizeof(sock_addr)) < 0)
 	{
         DBG_PRINTF("[RLOG] rlog_tcp_init::bind() failed %d\n", errno);
-        close(socket_fd);
-        socket_fd = -1;
+        close(server_socket);
+        server_socket = -1;
 		return false;
 	}
 
-    if ((listen(socket_fd, 1)) != 0)
+    if ((listen(server_socket, RLOG_TCPIP_MAX_CLI)) != 0)
     {
         DBG_PRINTF("[RLOG] rlog_tcp_init::listen() failed %d\n", errno);
-        close(socket_fd);
-        socket_fd = -1;
+        close(server_socket);
+        server_socket = -1;
         return false;
     }
 
     return true;
 }
+
+bool rlog_tcp_check_socket(int sockfd) 
+{ 
+    char sock_buf;
+    if (recv(sockfd, &sock_buf, sizeof(char), MSG_PEEK | MSG_DONTWAIT) == 0) {
+        // when a stream socket (i.e TCP) peer has performed an orderly shutdown, the return value will be 0.
+        return false; 
+    } 
+
+    // since the client will never send anything the return -1 might mean
+    // the socket is still open, but just in case lets test for ECONNRESET.
+    // This needs double checking. It does not seem right but it is working :-)
+    if ( errno == ECONNRESET ) { return false; }
+
+    return true; 
+} 
 
 bool rlog_tcp_poll()
 {
@@ -123,67 +173,96 @@ bool rlog_tcp_poll()
     struct sockaddr_in client;
     int fd = -1;
 
-    if( socket_fd < 0 )
-        return false;
-
-    len = sizeof(client);
-    fd = accept(socket_fd, (struct sockaddr *)&client, (socklen_t*)&len);
-
-	if( fd > 0 )
-	{
-		// accept was successful		
-		if( cli_socket_fd > 0 )
-		{
-			// previous connection was not closed properly so lets signal that we lost 
-			// the previous connection
-			rlogf(RLOG_WARNING, "[RLOG] Lost connection from %s", cli_ip);
-		}
-		
-		// assume new client
-		cli_socket_fd = fd;
-		struct in_addr ipAddr = client.sin_addr;
-		inet_ntop( AF_INET, &ipAddr, cli_ip, INET_ADDRSTRLEN );
-		rlogf(RLOG_INFO, "[RLOG] New connection from %s", cli_ip);
-		return true;		
-	}
-
-    // if it got to here its because accept failed, let's see why...		
-    if( cli_socket_fd == -1 )
-    {
-        // we have no client connected at the moment, so either theres a system error or no one is trying to connect.
-        // lets see if its an error...
-
-        // accept() returns EWOULDBLOCK if O_NONBLOCK is set for the socket and no connections are present to be accepted
-        // so thats not an actual error, let's see if its something else
-        if( errno != EWOULDBLOCK ) {
-
-            // something went terribly wrong, print!
-            DBG_PRINTF("[RLOG] rlog_tcp_poll::accept() failed %d\n", errno);
-        }
-
-        // nothing to do here..
+    if( server_socket < 0 ) {
         return false;
     }
-    
-    // if it got to here its because we already have a client connected, so carry on..
-    return true;
+
+    for (int i=0; i < RLOG_TCPIP_MAX_CLI; i++)
+    {			
+        if ( cli[i].socket > 0 )
+        {
+            if( !rlog_tcp_check_socket(cli[i].socket) )
+            {
+                // we lost the connection but haven't detected till now
+                rlogf(RLOG_WARNING, "[RLOG] Lost connection from %s", cli[i].ip_str);	
+                cli[i].socket = -1;
+            }				
+        }			
+    }
+
+    len = sizeof(client);
+    fd = accept(server_socket, (struct sockaddr *)&client, (socklen_t*)&len);
+
+	if( fd > 0 ) // accept() was successful	
+	{
+        // find available socket			
+		for (int i=0; i < RLOG_TCPIP_MAX_CLI; i++)
+		{			
+			if ( cli[i].socket == -1 )
+			{
+				// assume new client
+				cli[i].socket = fd;
+				struct in_addr ipAddr = client.sin_addr;
+				inet_ntop( AF_INET, &ipAddr, cli[i].ip_str, INET_ADDRSTRLEN );
+				rlogf(RLOG_INFO, "[RLOG] New connection from %s", cli[i].ip_str);
+				return true;				
+			}
+		}
+		
+		// should never pass here, but in any case..
+		DBG_PRINTF("[RLOG] rlog_tcp_poll: a new connection was accepted but no socket is available! \n");		
+		return false;		
+	}
+	else // accept() failed 
+	{
+        // if errno == EWOULDBLOCK it only means that no one is trying to connect and thats ok, however..
+        if( errno != EWOULDBLOCK ) 
+        {
+            // something went terribly wrong, print!
+            DBG_PRINTF("[RLOG] rlog_tcp_poll::accept() failed %d\n", errno);
+        }				
+
+		for (int i=0; i < RLOG_TCPIP_MAX_CLI; i++)
+		{			
+			if ( cli[i].socket > 0 )
+			{
+                //we have at least one client still connected, so carry on..
+                return true;
+			}
+		}	
+	}
+	
+    // we don't have any client so nothing to do..
+    return false;
 }
 
 bool rlog_tcp_send(const void* buf, int len)
 {
 	int ret = 0;
-    if(cli_socket_fd < 0)
-        return false;
-
-    ret = send(cli_socket_fd, buf, len, MSG_DONTWAIT);
-
-    if(ret == -1)
-    {
-        DBG_PRINTF("[RLOG] rlog_tcp_send::send() failed %d\n", errno);
-        cli_socket_fd = -1;
-        rlogf(RLOG_WARNING, "[RLOG] Lost connection from %s", cli_ip);
-        return false; //lost connection
-    }
-
-    return true;
+	unsigned int logs_sent = 0;
+	
+	for (int i=0; i < RLOG_TCPIP_MAX_CLI; i++)
+	{
+		if( cli[i].socket > 0 )
+		{
+			ret = send(cli[i].socket, buf, len, MSG_DONTWAIT);
+			
+			if( ret == -1 )
+			{
+				DBG_PRINTF("[RLOG] rlog_tcp_send::send() failed %d\n", errno);
+				cli[i].socket = -1;
+				rlogf(RLOG_INFO, "[RLOG] Lost connection from %s", cli[i].ip_str);
+			}
+			else{
+				logs_sent++;
+			}
+		}		
+	}
+	
+    // if we were able to send to at least 1 client its a success!
+	if( logs_sent )
+		return true;
+	
+    // no client received this log, we must warn the daemon to do some backup
+	return false;
 }
