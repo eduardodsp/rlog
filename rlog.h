@@ -2,9 +2,9 @@
  * @file rlog.h
  * @author edsp
  * @brief RLOG Server API
- * @date 2022-09-17
+ * @date 2024-01-10
  * 
- * @copyright Copyright (c) 2022
+ * @copyright Copyright (c) 2024
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -32,7 +32,7 @@
  * @brief Current RLOG version.
  * This follows the classic semantic versioning format
  */
-#define RLOG_VERSION "2.3.0"
+#define RLOG_VERSION "1.0.0"
 
 /**
  * @brief User defined maximum size of log messages.

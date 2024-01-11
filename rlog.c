@@ -2,9 +2,9 @@
  * @file rlog.c
  * @author edsp
  * @brief RLOG Server API implementation
- * @date 2022-09-17
+ * @date 2024-01-10
  * 
- * @copyright Copyright (c) 2022
+ * @copyright Copyright (c) 2024
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -78,7 +78,7 @@
  */
 #if RLOG_HEARTBEAT
     #ifndef RLOG_HEARTBEAT_PERIOD_SEC
-        #define RLOG_HEARTBEAT_PERIOD_SEC 60 /* 3600 = 1h */
+        #define RLOG_HEARTBEAT_PERIOD_SEC 3600 /* 3600 = 1h */
     #endif
 #endif
 
