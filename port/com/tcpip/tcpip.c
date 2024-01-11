@@ -1,7 +1,9 @@
 /**
  * @file tcp.c
  * @author edsp
- * @brief Default TCP/IP IP APIs for client/server communications
+ * @brief Default TCP/IP IP APIs for client/server communications. 
+ * This implementation support multiple clients however it does not 
+ * support multilpe instances of the interface.
  * @version 1.0.0
  * @date 2022-09-29
  * 
@@ -46,8 +48,8 @@
 /**
  * @brief RLOG protocol TCP Port 
  */
-#ifndef RLOG_TCPIP_PORT
-    #define RLOG_TCPIP_PORT  8888
+#ifndef RLOG_DEFAULT_TCPIP_PORT
+    #define RLOG_DEFAULT_TCPIP_PORT  8888
 #endif
 
 /**
@@ -59,30 +61,37 @@
 
 /**
  * @brief Initialize server TCP socket
+ * 
+ * @param me Not used.
  * @return true if TCP socket is ready and listening
  */
-bool rlog_tcp_init(void);
+bool rlog_tcp_init(void* me);
 
 /**
  * @brief Check if at least one client has connected and test all connections. 
  * Non blocking function!
+ *
+ * @param me Not used.
  * @return true if there is at least one client connected.
  */
-bool rlog_tcp_poll(void);
+bool rlog_tcp_poll(void* me);
 
 /**
  * @brief Send data to all connected TCP clients
  * 
+ * @param me Not used.
  * @param buf Buffer holding the message to be sent
  * @param len Length of the message in bytes
  * @return true if was able to send a message to at least one client 
  */
-bool rlog_tcp_send(const void* buf, int len);
+bool rlog_tcp_send(void* me, const void* buf, int len);
 
 rlog_ifc_t rlog_default_tcpip_ifc = {
     .init       = &rlog_tcp_init,
     .poll       = &rlog_tcp_poll,
     .send       = &rlog_tcp_send,
+    .deinit     = NULL,
+    .ctx        = NULL,
 };
 
 typedef struct rlog_tcp_cli_t
@@ -98,7 +107,7 @@ static struct sockaddr_in sock_addr = { 0 };
 static rlog_tcp_cli_t cli[RLOG_TCPIP_MAX_CLI];
 
 
-bool rlog_tcp_init()
+bool rlog_tcp_init(void* me)
 {	
 	for (int i=0; i < RLOG_TCPIP_MAX_CLI; i++)
 	{			
@@ -108,7 +117,7 @@ bool rlog_tcp_init()
 	
     server_socket = socket(AF_INET , SOCK_STREAM , 0);
 
-    if(server_socket == -1) 
+    if( server_socket == -1 ) 
     {
         DBG_PRINTF("[RLOG] rlog_tcp_init::socket() failed %d\n", errno);
         return false;
@@ -127,12 +136,12 @@ bool rlog_tcp_init()
 
     sock_addr.sin_family = AF_INET;
     sock_addr.sin_addr.s_addr = INADDR_ANY;
-    sock_addr.sin_port = htons( RLOG_TCPIP_PORT );
+    sock_addr.sin_port = htons( RLOG_DEFAULT_TCPIP_PORT );
 
     int flags = fcntl(server_socket, F_GETFL, 0);
     fcntl(server_socket, F_SETFL, flags | O_NONBLOCK);
     
-	if(bind(server_socket,(struct sockaddr *)&sock_addr , sizeof(sock_addr)) < 0)
+	if( bind(server_socket,(struct sockaddr *)&sock_addr , sizeof(sock_addr)) < 0 )
 	{
         DBG_PRINTF("[RLOG] rlog_tcp_init::bind() failed %d\n", errno);
         close(server_socket);
@@ -140,7 +149,7 @@ bool rlog_tcp_init()
 		return false;
 	}
 
-    if ((listen(server_socket, RLOG_TCPIP_MAX_CLI)) != 0)
+    if( listen(server_socket, RLOG_TCPIP_MAX_CLI) != 0 )
     {
         DBG_PRINTF("[RLOG] rlog_tcp_init::listen() failed %d\n", errno);
         close(server_socket);
@@ -154,7 +163,7 @@ bool rlog_tcp_init()
 bool rlog_tcp_check_socket(int sockfd) 
 { 
     char sock_buf;
-    if (recv(sockfd, &sock_buf, sizeof(char), MSG_PEEK | MSG_DONTWAIT) == 0) {
+    if( recv(sockfd, &sock_buf, sizeof(char), MSG_PEEK | MSG_DONTWAIT) == 0 ) {
         // when a stream socket (i.e TCP) peer has performed an orderly shutdown, the return value will be 0.
         return false; 
     } 
@@ -167,7 +176,7 @@ bool rlog_tcp_check_socket(int sockfd)
     return true; 
 } 
 
-bool rlog_tcp_poll()
+bool rlog_tcp_poll(void* me)
 {
     int len;
     struct sockaddr_in client;
@@ -236,7 +245,7 @@ bool rlog_tcp_poll()
     return false;
 }
 
-bool rlog_tcp_send(const void* buf, int len)
+bool rlog_tcp_send(void* me, const void* buf, int len)
 {
 	int ret = 0;
 	unsigned int logs_sent = 0;

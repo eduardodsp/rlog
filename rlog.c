@@ -78,14 +78,30 @@
  */
 #if RLOG_HEARTBEAT
     #ifndef RLOG_HEARTBEAT_PERIOD_SEC
-        #define RLOG_HEARTBEAT_PERIOD_SEC 3600 /* 1h */
+        #define RLOG_HEARTBEAT_PERIOD_SEC 60 /* 3600 = 1h */
     #endif
+#endif
+
+#ifndef RLOG_MAX_NUM_IFC
+    #define RLOG_MAX_NUM_IFC 2
 #endif
 
 #define MSG_QUEUE_SIZE RLOG_QUEUE_SIZE
 
 #define EVENT_NEW_MSG           ( 1 << 0 )
 #define EVENTS_MASK             ( EVENT_NEW_MSG )
+
+
+/**
+ * @brief Communication interface control block
+ */
+static struct 
+{
+    rlog_ifc_t ifc[RLOG_MAX_NUM_IFC];
+    bool up[RLOG_MAX_NUM_IFC];
+
+} coms;
+static unsigned char n_ifc = 0; //empty
 
 /**
  * @brief Ring buffer implementation
@@ -125,7 +141,12 @@ static os_thread_t* thread_handle;
 /**
  * @brief mutual exclusion semaphore
  */
-static os_mutex_t*  queue_lock;
+static os_mutex_t*  queue_lock = NULL;
+
+/**
+ * @brief mutual exclusion semaphore
+ */
+static os_mutex_t*  com_lock = NULL;
 
 /**
  * @brief Set of events to wake the main thread
@@ -133,9 +154,14 @@ static os_mutex_t*  queue_lock;
 static os_event_t* wakeup_events;
 
 /**
- * @brief Communication interface used by the server
+ * @brief Signals the thread must terminate.
  */
-static rlog_ifc_t com;
+static bool terminate = false;
+
+/**
+ * @brief Indicate the server has already been intialized
+ */
+static bool ready = false;
 
 #if RLOG_DLOG_ENABLE
 /**
@@ -293,30 +319,22 @@ int queue_get(char* msg)
     return strlen(msg);
 }
 
-bool rlog_init(const char* filepath, unsigned int size, rlog_ifc_t ifc)
+bool rlog_init(const char* filepath, unsigned int size)
 {
-    if(ifc.poll == NULL) {
-        DBG_PRINTF("[RLOG] rlog_init failed. Invalid parameter\n");
-        goto INIT_FAIL;
-    }
-
-    if(ifc.init == NULL) {
-        DBG_PRINTF("[RLOG] rlog_init failed. Invalid parameter\n");
-        goto INIT_FAIL;
-    }
-
-    if(ifc.send == NULL) {
-        DBG_PRINTF("[RLOG] rlog_init failed. Invalid parameter\n");
-        goto INIT_FAIL;
-    }
-
-    // install communication interface
-    com = ifc;
- 
-    if ( !com.init() )
+    if( ready ) 
     {
-        DBG_PRINTF("[RLOG] rlog_init failed to initialize communication interface\n");
-        goto INIT_FAIL;
+        DBG_PRINTF("[RLOG] rlog server already is initialized\n");
+        return false;
+    }
+
+    // check if com_lock has already been created
+    if ( com_lock == NULL )
+    {
+        com_lock = os_mutex_create();
+        if( com_lock == NULL ) {
+            DBG_PRINTF("[RLOG] rlog_init failed to create mutex\n");
+            goto INIT_FAIL;
+        }
     }
 
     queue_init();
@@ -343,11 +361,17 @@ bool rlog_init(const char* filepath, unsigned int size, rlog_ifc_t ifc)
         goto INIT_FAIL;
     }
 
+    ready = true;
     os_sleep_us(1000);
     return true;
 
 INIT_FAIL:
     return false;    
+}
+
+void rlog_kill(void)
+{
+    terminate = true;
 }
 
 void rlog(RLOG_TYPE type, const char* msg)
@@ -374,6 +398,134 @@ void rlogf(RLOG_TYPE type, const char* format, ...)
     queue_putf(log, format, args);
     va_end(args);
     os_event_set(wakeup_events, EVENT_NEW_MSG);
+}
+
+bool rlog_install_interface( rlog_ifc_t interface )
+{
+    if ( com_lock == NULL )
+    {
+        com_lock = os_mutex_create();
+        if( com_lock == NULL ) {
+            DBG_PRINTF("[RLOG] rlog_init failed to create mutex\n");
+            return false;
+        }
+    }
+
+    if(interface.poll == NULL) {
+        DBG_PRINTF("[RLOG] rlog_install_interface failed. Invalid parameter\n");
+        return false;
+    }
+
+    if(interface.init == NULL) {
+        DBG_PRINTF("[RLOG] rlog_install_interface failed. Invalid parameter\n");
+        return false;
+    }
+
+    if(interface.send == NULL) {
+        DBG_PRINTF("[RLOG] rlog_install_interface failed. Invalid parameter\n");
+        return false;
+    }
+
+    os_mutex_lock(com_lock);
+
+    if( n_ifc >= RLOG_MAX_NUM_IFC ) {
+        DBG_PRINTF("[RLOG] rlog_install_interface failed. Too many interfaces!\n");
+        os_mutex_unlock(com_lock);
+        return false;
+    }
+
+    // try to initialize the interface
+    if( !interface.init(interface.ctx) )
+    {
+        DBG_PRINTF("[RLOG] rlog_install_interface failed to initialize interface\n");
+        os_mutex_unlock(com_lock);
+        return false;
+    }
+
+    coms.ifc[n_ifc++] = interface;
+
+    os_mutex_unlock(com_lock);
+
+    return true;
+}
+
+/**
+ * @brief Poll all installed interfaces to see which is avaialble.
+ * 
+ * @return true If at least on interface is ready to receive messages
+ * @return false If no interface can receive messages at the moment.
+ */
+bool rlog_poll()
+{
+    rlog_ifc_t p;
+    bool up = false;
+
+    os_mutex_lock(com_lock);
+
+    for( int i=0; i < n_ifc; i++ )
+    {
+        p = coms.ifc[i];         
+        coms.up[i] = p.poll(p.ctx);
+
+        if( !up ) {
+            up = coms.up[i];
+        }
+    }
+
+    os_mutex_unlock(com_lock);
+
+    return up;   
+}
+
+/**
+ * @brief Send message to all interfaces that are ready to receive
+ * 
+ * @param buf Buffer with message to be sent
+ * @param len Size of the message in bytes
+ * @return true If at least one interface has received the message
+ * @return false If no interface has received the message
+ */
+bool rlog_send(const void* buf, int len)
+{
+    rlog_ifc_t p;
+    unsigned char ok = 0;
+
+    os_mutex_lock(com_lock);
+
+    for( int i=0; i < n_ifc; i++ )
+    {
+        if( coms.up[i] )
+        {
+            p = coms.ifc[i]; 
+
+            if ( p.send(p.ctx, buf, len) )
+                ok++;            
+        }         
+    }
+
+    os_mutex_unlock(com_lock);
+
+    return ( ok > 0 );
+}
+
+/**
+ * @brief Deinitialize all installed interfaces 
+ */
+void rlog_deinit()
+{
+    rlog_ifc_t p;
+    os_mutex_lock(com_lock);
+
+    for( int i=0; i < n_ifc; i++ )
+    {
+        p = coms.ifc[i]; 
+
+        if( p.deinit ) {
+            p.deinit(p.ctx);
+        }
+
+    }
+    os_mutex_unlock(com_lock);
 }
 
 #if _RLOG_DBG_   
@@ -421,7 +573,7 @@ void dump_dlog_to_remote()
     //dispatch all enqueued log messages
     while( dlog_peek(&logger, msg_buffer, sizeof(msg_buffer)) )
     {        
-        if( com.send(msg_buffer, strlen(msg_buffer)) ) 
+        if( rlog_send(msg_buffer, strlen(msg_buffer)) ) 
         { 
             dlog_next(&logger); 
         }
@@ -440,7 +592,7 @@ void dump_queue_to_remote()
     //dispatch all enqueued log messages
     while( queue_get(msg_buffer) )
     {        
-        if( !com.send(msg_buffer,strlen(msg_buffer)) )
+        if( !rlog_send(msg_buffer,strlen(msg_buffer)) )
         {
             // failed to send, put it on dlog for later
             dlog_put(&logger, msg_buffer);
@@ -481,12 +633,12 @@ void server_thread(void* arg)
     uint32_t evts = 0; 
 
     rlog(RLOG_INFO, SERVER_BANNER);
-    while( 1 )
+    while( !terminate )
     {         
         evts = os_event_wait(wakeup_events, EVENTS_MASK, EVENT_TIMEOUT);
         os_event_clear(wakeup_events, evts);
 
-        if( com.poll() )
+        if( rlog_poll() )
         {
             // check backlog
             dump_dlog_to_remote();
@@ -505,5 +657,7 @@ void server_thread(void* arg)
 #if _RLOG_DBG_
         rlog_print_dbg_stats();
 #endif
-    } 
+    }
+
+    rlog_deinit(); 
 }

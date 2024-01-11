@@ -12,6 +12,10 @@ I wrote this to help me monitor the status of devices on my other projects. Some
     - Support for persistence file when no client is connected.
     - Support for multiple communication protocols including user defined protocols.
     - Support for multiple TCP clients when using the RLOG_DEFAULT_TCPIP interface.
+    - Support for multiple active interfaces. The server will write messages to all connected
+    interfaces.
+    - Support for stdout. This can be used when connected to the device through some serial monitor
+    or SSH.
 
 ## Supported Platforms
 |   OS          | Target          | Status          |
@@ -25,10 +29,12 @@ I wrote this to help me monitor the status of devices on my other projects. Some
     
     // Initialize target HW...
     
-    // Initialize network interface...
-    
-    // Initialize RLOG server and set up the backup file
-    if( rlog_init("/spiffs/rlog.log", 40, RLOG_DEFAULT_TCPIP) ) {
+    // Install and initialize communication interface...
+    rlog_install_interface(RLOG_STDOUT);
+    rlog_install_interface(RLOG_DEFAULT_TCPIP);
+
+    // Initialize RLOG server and the backup file
+    if( rlog_init("/spiffs/rlog.log", 40) ) {
         // Log an INFO message
         rlog(RLOG_INFO,"HELLO WORLD!");
     }
