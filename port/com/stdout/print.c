@@ -32,7 +32,7 @@ bool rlog_stdout_poll(void* me)
 
 bool rlog_stdout_send(void* me, const void* buf, int len)
 {
-    if( printf("%s", (const char*) buf) < 0 )
+    if( printf("%s\n", (const char*) buf) < 0 )
         return false;
         
     return true;

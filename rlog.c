@@ -78,7 +78,7 @@
  */
 #if RLOG_HEARTBEAT
     #ifndef RLOG_HEARTBEAT_PERIOD_SEC
-        #define RLOG_HEARTBEAT_PERIOD_SEC 3600 /* 3600 = 1h */
+        #define RLOG_HEARTBEAT_PERIOD_SEC 30 /* 3600 = 1h */
     #endif
 #endif
 
@@ -257,7 +257,7 @@ void queue_put(log_t log, const char* msg)
     }
 
     msg_queue.buffer[msg_queue.tail].timestamp = log.timestamp;
-    msg_queue.buffer[msg_queue.tail].type = log.type;
+    msg_queue.buffer[msg_queue.tail].pri = log.pri;
     fast_strncpy(msg_queue.buffer[msg_queue.tail].msg, msg, sizeof(msg_queue.buffer[msg_queue.tail].msg));
 
     if( (msg_queue.tail == msg_queue.head) && full )
@@ -282,7 +282,7 @@ void queue_putf(log_t log, const char* format,  va_list args)
         full = true;
     }
     msg_queue.buffer[msg_queue.tail].timestamp = log.timestamp;
-    msg_queue.buffer[msg_queue.tail].type = log.type;
+    msg_queue.buffer[msg_queue.tail].pri = log.pri;
     
     vsnprintf(msg_queue.buffer[msg_queue.tail].msg, sizeof(msg_queue.buffer[msg_queue.tail].msg), format, args);
 
@@ -308,7 +308,7 @@ int queue_get(char* msg)
     }
 
     log.timestamp = msg_queue.buffer[msg_queue.head].timestamp;
-    log.type = msg_queue.buffer[msg_queue.head].type;
+    log.pri = msg_queue.buffer[msg_queue.head].pri;
     fast_strncpy(log.msg, msg_queue.buffer[msg_queue.head].msg, sizeof(msg_queue.buffer[msg_queue.head].msg));
 
     msg_queue.head = (msg_queue.head + 1) % MSG_QUEUE_SIZE;
@@ -380,7 +380,7 @@ void rlog(RLOG_TYPE type, const char* msg)
 #if RLOG_TIMESTAMP_ENABLE
     time(&log.timestamp);
 #endif
-    log.type = type;
+    log.pri = 8 + type;
     queue_put(log, msg);
     os_event_set(wakeup_events, EVENT_NEW_MSG);
 }
@@ -393,7 +393,7 @@ void rlogf(RLOG_TYPE type, const char* format, ...)
 #if RLOG_TIMESTAMP_ENABLE
     time(&log.timestamp);
 #endif
-    log.type = type;
+    log.pri = 8 + type;
     va_start(args, format);
     queue_putf(log, format, args);
     va_end(args);
@@ -590,15 +590,17 @@ static
 void dump_queue_to_remote()
 {
     //dispatch all enqueued log messages
-    while( queue_get(msg_buffer) )
+    int len = queue_get(msg_buffer);
+    while( len )
     {        
-        if( !rlog_send(msg_buffer,strlen(msg_buffer)) )
+        if( !rlog_send(msg_buffer, len) )
         {
             // failed to send, put it on dlog for later
             dlog_put(&logger, msg_buffer);
             break;
         }           
         os_sleep_us(QUEUE_POLLING_PERIOD_US);
+        len = queue_get(msg_buffer);
     }
 }
 

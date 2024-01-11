@@ -1,7 +1,7 @@
 /**
- * @file tcp.c
+ * @file tcpip.c
  * @author edsp
- * @brief Default TCP/IP IP APIs for client/server communications. 
+ * @brief Default TCP APIs for client/server communications. 
  * This implementation support multiple clients however it does not 
  * support multilpe instances of the interface.
  * @version 1.0.0

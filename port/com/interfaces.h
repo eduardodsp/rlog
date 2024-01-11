@@ -2,6 +2,7 @@
 #define _PORT_COM_INTERFACES_H_
 
 #include <stdbool.h>
+#include "udp/udpip.h"
 
 /**
  * @brief Set of callbacks to enable communication between client and server.
@@ -70,6 +71,12 @@ extern rlog_ifc_t rlog_default_tcpip_ifc;
  */
 extern rlog_ifc_t rlog_stdout;
 #define RLOG_STDOUT rlog_stdout
+
+/**
+ * @brief Default UDP interface
+ */
+extern rlog_ifc_t rlog_rlog_udp_ifc;
+#define RLOG_DEFAULT_UDP rlog_rlog_udp_ifc
  
 /*
 TODO: Add more interfaces..
