@@ -66,12 +66,15 @@ typedef enum
  * RLOG_DLOG_ENABLE is set to 1, else it is ignored
  * @param size Size of backup file in number of message entries. Only used if
  * RLOG_DLOG_ENABLE is set to 1, else it is ignored
- * @param ifc Communication interface to be used. If set to RLOG_DEFAULT_IFC then
- * standard TCP/IP protocol will be used. See \ref rlog_ifc_t for more details.
  * @return true if succesfull initialized the server
  * @return false if failed
  */
-bool rlog_init(const char* filepath, unsigned int size, rlog_ifc_t ifc);
+bool rlog_init(const char* filepath, unsigned int size);
+
+/**
+ * @brief Kills the server and de-initialize all installed interfaces;
+ */
+void rlog_kill(void);
 
 /**
  * @brief Insert a log message into the queue
@@ -92,23 +95,14 @@ void rlog(RLOG_TYPE type, const char* msg);
 void rlogf(RLOG_TYPE type, const char* format, ...);
 
 /**
- * @brief Initialize interface structure. See \ref rlog_ifc_t for more details
+ * @brief Install a new interface instance, See \ref rlog_ifc_t for more details.
+ * This function will first attempt to intialize the interface using the provided 
+ * init function and only then it will install the function pointers.
  * 
- * @param ifc Pointer to interface descriptor strucutre
- * @param ifc_init Function pointer to intialize communication interface
- * @param ifc_poll Function pointer wait for client connection
- * @param ifc_send Function pointer send messages to the client.
+ * @param interface  Interface descriptor
+ * @return true If interface was installed and initialized.
+ * @return false If failed to install the interface.
  */
-inline void rlog_init_interface( 
-    rlog_ifc_t* ifc, 
-    bool (*ifc_init)(void),
-    bool (*ifc_poll)(void),
-    bool (*ifc_send)(const void* buf, int len)
-    )
-{
-    ifc->init = ifc_init;
-    ifc->poll = ifc_poll;
-    ifc->send = ifc_send;
-}
+bool rlog_install_interface(rlog_ifc_t interface);
 
 #endif //_RLOG_H_
