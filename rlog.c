@@ -25,9 +25,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#include "port/com/interfaces.h"
-
-
 #include "rlog.h"
 #include "port/os/osal.h"
 #include "format.h"

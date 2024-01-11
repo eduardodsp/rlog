@@ -45,9 +45,6 @@ The header files on [port directory](https://github.com/eduardodsp/rlog/tree/mai
 ```
 port/
 |
-|-- com/ (Communication APIs)
-|   |-- interfaces.h (Supported communication protocols)
-|   '-- tcpip (Default TCP/IP APIs)
 |
 |-- os/ (Operating system and middleware APIs) 
 |   |-- osal.h (Operating systems abstraction layer) 

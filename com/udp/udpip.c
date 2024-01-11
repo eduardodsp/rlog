@@ -86,7 +86,7 @@ bool rlog_udp_poll(void* me);
  */
 bool rlog_udp_send(void* me, const void* buf, int len);
 
-rlog_ifc_t rlog_rlog_udp_ifc = {
+rlog_ifc_t rlog_udp_ifc = {
     .init       = &rlog_udp_init,
     .poll       = &rlog_udp_poll,
     .send       = &rlog_udp_send,
@@ -136,7 +136,7 @@ bool rlog_udp_init(void* me)
     }
 
     sock_addr.sin_family = AF_INET;
-    sock_addr.sin_addr.s_addr = inet_addr(server_ip);;
+    sock_addr.sin_addr.s_addr = inet_addr(server_ip);
     sock_addr.sin_port = htons( udp_port );
 
     initialized = true;

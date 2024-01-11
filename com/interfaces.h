@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include "udp/udpip.h"
+#include "rfc6587/rfc6587.h"
 
 /**
  * @brief Set of callbacks to enable communication between client and server.
@@ -75,8 +76,11 @@ extern rlog_ifc_t rlog_stdout;
 /**
  * @brief Default UDP interface
  */
-extern rlog_ifc_t rlog_rlog_udp_ifc;
-#define RLOG_DEFAULT_UDP rlog_rlog_udp_ifc
+extern rlog_ifc_t rlog_udp_ifc;
+#define RLOG_DEFAULT_UDP rlog_udp_ifc
+
+extern rlog_ifc_t rlog_rfc6587;
+#define RLOG_RFC6587 rlog_rfc6587
  
 /*
 TODO: Add more interfaces..

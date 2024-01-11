@@ -26,7 +26,7 @@
 #include <stdint.h>
 #include <stdarg.h>
 
-#include "port/com/interfaces.h"
+#include "com/interfaces.h"
 #include "format.h"
 
 /**
