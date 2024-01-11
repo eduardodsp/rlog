@@ -26,10 +26,16 @@
 #include <stdio.h>
 
 #include "port/com/interfaces.h"
-#include "dlog/dlog.h"
+
+
 #include "rlog.h"
 #include "port/os/osal.h"
 #include "format.h"
+
+#if RLOG_DLOG_ENABLE
+    #define DLOG_LINE_MAX_SIZE MSG_MAX_SIZE_CHAR
+    #include "dlog/dlog.h"
+#endif
 
 #ifndef _RLOG_DBG_
     #define _RLOG_DBG_    0
@@ -144,11 +150,6 @@ static os_thread_t* thread_handle;
 static os_mutex_t*  queue_lock = NULL;
 
 /**
- * @brief mutual exclusion semaphore
- */
-static os_mutex_t*  com_lock = NULL;
-
-/**
  * @brief Set of events to wake the main thread
  */
 static os_event_t* wakeup_events;
@@ -162,6 +163,8 @@ static bool terminate = false;
  * @brief Indicate the server has already been intialized
  */
 static bool ready = false;
+
+static char hostname[20] = "-";
 
 #if RLOG_DLOG_ENABLE
 /**
@@ -315,7 +318,7 @@ int queue_get(char* msg)
     msg_queue.cnt--;
     os_mutex_unlock(queue_lock);
 
-    make_log_string(msg, &log);
+    make_log_string(hostname, msg, &log);
     return strlen(msg);
 }
 
@@ -323,18 +326,8 @@ bool rlog_init(const char* filepath, unsigned int size)
 {
     if( ready ) 
     {
-        DBG_PRINTF("[RLOG] rlog server already is initialized\n");
+        DBG_PRINTF("[RLOG] rlog server already running \n");
         return false;
-    }
-
-    // check if com_lock has already been created
-    if ( com_lock == NULL )
-    {
-        com_lock = os_mutex_create();
-        if( com_lock == NULL ) {
-            DBG_PRINTF("[RLOG] rlog_init failed to create mutex\n");
-            goto INIT_FAIL;
-        }
     }
 
     queue_init();
@@ -400,15 +393,27 @@ void rlogf(RLOG_TYPE type, const char* format, ...)
     os_event_set(wakeup_events, EVENT_NEW_MSG);
 }
 
+bool rlog_set_hostname(const char* name)
+{
+    if( ready ) 
+    {
+        DBG_PRINTF("[RLOG] rlog server already running \n");
+        return false;
+    }
+
+    if( !name )
+        return false;
+        
+    snprintf(hostname, sizeof(hostname), name);    
+    return true;
+}
+
 bool rlog_install_interface( rlog_ifc_t interface )
 {
-    if ( com_lock == NULL )
+    if( ready ) 
     {
-        com_lock = os_mutex_create();
-        if( com_lock == NULL ) {
-            DBG_PRINTF("[RLOG] rlog_init failed to create mutex\n");
-            return false;
-        }
+        DBG_PRINTF("[RLOG] rlog server already running \n");
+        return false;
     }
 
     if(interface.poll == NULL) {
@@ -426,11 +431,8 @@ bool rlog_install_interface( rlog_ifc_t interface )
         return false;
     }
 
-    os_mutex_lock(com_lock);
-
     if( n_ifc >= RLOG_MAX_NUM_IFC ) {
         DBG_PRINTF("[RLOG] rlog_install_interface failed. Too many interfaces!\n");
-        os_mutex_unlock(com_lock);
         return false;
     }
 
@@ -438,13 +440,10 @@ bool rlog_install_interface( rlog_ifc_t interface )
     if( !interface.init(interface.ctx) )
     {
         DBG_PRINTF("[RLOG] rlog_install_interface failed to initialize interface\n");
-        os_mutex_unlock(com_lock);
         return false;
     }
 
     coms.ifc[n_ifc++] = interface;
-
-    os_mutex_unlock(com_lock);
 
     return true;
 }
@@ -460,8 +459,6 @@ bool rlog_poll()
     rlog_ifc_t p;
     bool up = false;
 
-    os_mutex_lock(com_lock);
-
     for( int i=0; i < n_ifc; i++ )
     {
         p = coms.ifc[i];         
@@ -471,8 +468,6 @@ bool rlog_poll()
             up = coms.up[i];
         }
     }
-
-    os_mutex_unlock(com_lock);
 
     return up;   
 }
@@ -490,8 +485,6 @@ bool rlog_send(const void* buf, int len)
     rlog_ifc_t p;
     unsigned char ok = 0;
 
-    os_mutex_lock(com_lock);
-
     for( int i=0; i < n_ifc; i++ )
     {
         if( coms.up[i] )
@@ -503,8 +496,6 @@ bool rlog_send(const void* buf, int len)
         }         
     }
 
-    os_mutex_unlock(com_lock);
-
     return ( ok > 0 );
 }
 
@@ -514,7 +505,6 @@ bool rlog_send(const void* buf, int len)
 void rlog_deinit()
 {
     rlog_ifc_t p;
-    os_mutex_lock(com_lock);
 
     for( int i=0; i < n_ifc; i++ )
     {
@@ -525,7 +515,6 @@ void rlog_deinit()
         }
 
     }
-    os_mutex_unlock(com_lock);
 }
 
 #if _RLOG_DBG_   

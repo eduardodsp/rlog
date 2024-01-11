@@ -12,7 +12,7 @@
     #define RLOG_MAX_SIZE_CHAR  80
 #endif
 
-#define MSG_MAX_SIZE_CHAR (RLOG_MAX_SIZE_CHAR + 40)
+#define MSG_MAX_SIZE_CHAR (RLOG_MAX_SIZE_CHAR + 80)
 
 typedef enum
 {
@@ -35,6 +35,6 @@ typedef struct log_format_t
 }log_t;
 
 
-int make_log_string(char* str, log_t* log);
+int make_log_string(char* hostname, char* str, log_t* log);
 
 #endif //_FORMAT_H_

@@ -58,6 +58,17 @@
 bool rlog_init(const char* filepath, unsigned int size);
 
 /**
+ * @brief Set device hostname
+ * 
+ * @param name Pointer to c string. 
+ * The string must have a maximum size of 20 characters including termination and
+ * MUST NOT have spaces!
+ * @return true Succesfully set the device name
+ * @return false Failed to set device name
+ */
+bool rlog_set_hostname(const char* name);
+
+/**
  * @brief Kills the server and de-initialize all installed interfaces;
  */
 void rlog_kill(void);

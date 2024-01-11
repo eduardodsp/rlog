@@ -7,7 +7,7 @@
 #include "rlog.h"
 #include "format.h"
 
-int make_log_string(char* str, log_t* log)
+int make_log_string(char* hostname, char* str, log_t* log)
 {
     int nchar = 0;
     char date[80] = { 0 };
@@ -19,7 +19,7 @@ int make_log_string(char* str, log_t* log)
     strftime(date, sizeof(date), "%Y-%m-%dT%H:%M:%S", timeinfo);
 #endif
 
-    nchar = snprintf(str, MSG_MAX_SIZE_CHAR,"<%d>1 %s rlog - - - - %s",log->pri, date, log->msg);
+    nchar = snprintf(str, MSG_MAX_SIZE_CHAR,"<%d>1 %s %s - - - %s", log->pri, date, hostname, log->msg);
    
     if( nchar < 0 || nchar > MSG_MAX_SIZE_CHAR )
         return -1;
