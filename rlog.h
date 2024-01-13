@@ -27,7 +27,7 @@
 #include <stdarg.h>
 
 #include "com/interfaces.h"
-#include "format.h"
+#include "format/format.h"
 
 /**
  * @brief Current RLOG version.
@@ -101,5 +101,14 @@ void rlogf(RLOG_TYPE type, const char* format, ...);
  * @return false If failed to install the interface.
  */
 bool rlog_install_interface(rlog_ifc_t interface);
+
+/**
+ * @brief Set the message format
+ * 
+ * @param fmt Message format see \ref RLOG_FORMAT
+ * @return true If succesfully set the format
+ * @return false If failed to set the format
+ */
+bool rlog_set_format(RLOG_FORMAT fmt);
 
 #endif //_RLOG_H_

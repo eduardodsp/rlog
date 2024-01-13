@@ -1,5 +1,5 @@
-#ifndef _FORMAT_H_
-#define _FORMAT_H_
+#ifndef _RLOG_FORMAT_H_
+#define _RLOG_FORMAT_H_
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -14,6 +14,14 @@
 
 #define MSG_MAX_SIZE_CHAR (RLOG_MAX_SIZE_CHAR + 80)
 
+typedef enum {
+
+    RLOG_RFC3164 = 0,
+    RLOG_RFC5424 = 1,
+    RLOG_NO_FORMAT,
+
+}RLOG_FORMAT;
+
 typedef enum
 {
     RLOG_EMERGENCY  = 0,    // Emergency: system is unusable
@@ -27,14 +35,14 @@ typedef enum
 
 }RLOG_TYPE;
 
-typedef struct log_format_t
+typedef struct log_t
 {
     time_t timestamp;
     uint8_t pri;    
     char msg[RLOG_MAX_SIZE_CHAR];
 }log_t;
 
+int make_log_string(int format, char* hostname, char* str, log_t* log);
 
-int make_log_string(char* hostname, char* str, log_t* log);
 
-#endif //_FORMAT_H_
+#endif //_RLOG_FORMAT_H_

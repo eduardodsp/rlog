@@ -3,8 +3,8 @@
 #include <string.h>
 
 #include "../interfaces.h"
-#include "../../os/osal.h"
-#include "../../../rlog.h"
+#include "../../port/os/osal.h"
+#include "../../rlog.h"
 
 bool rlog_stdout_init(void* me);
 bool rlog_stdout_poll(void* me);
@@ -32,7 +32,7 @@ bool rlog_stdout_poll(void* me)
 
 bool rlog_stdout_send(void* me, const void* buf, int len)
 {
-    if( printf("%s\n", (const char*) buf) < 0 )
+    if( printf("%s", (const char*) buf) < 0 )
         return false;
         
     return true;

@@ -31,8 +31,8 @@
 #include "lwip/sys.h"
 
 #include "../interfaces.h"
-#include "../../os/osal.h"
-#include "../../../rlog.h"
+#include "../../port/os/osal.h"
+#include "../../rlog.h"
 
 #ifndef _RLOG_UDPIP_DBG_
     #define _RLOG_UDPIP_DBG_ 1
@@ -43,20 +43,6 @@
 #define DBG_PRINTF(...) printf(__VA_ARGS__)
 #else
 #define DBG_PRINTF(...)
-#endif
-
-/**
- * @brief Rlog thread stack size. Default 4096
- */
-#ifndef RFC6587_STACK_SIZE
-    #define RFC6587_STACK_SIZE 2048
-#endif
-
-/**
- * @brief Rlog thread priority. Default 8
- */
-#ifndef RFC6587_TASK_PRIO
-    #define RFC6587_TASK_PRIO 8
 #endif
 
 /**

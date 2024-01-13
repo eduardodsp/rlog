@@ -27,7 +27,6 @@
 
 #include "rlog.h"
 #include "port/os/osal.h"
-#include "format.h"
 
 #if RLOG_DLOG_ENABLE
     #define DLOG_LINE_MAX_SIZE MSG_MAX_SIZE_CHAR
@@ -81,7 +80,7 @@
  */
 #if RLOG_HEARTBEAT
     #ifndef RLOG_HEARTBEAT_PERIOD_SEC
-        #define RLOG_HEARTBEAT_PERIOD_SEC 30 /* 3600 = 1h */
+        #define RLOG_HEARTBEAT_PERIOD_SEC 3600 /* 3600 = 1h */
     #endif
 #endif
 
@@ -161,7 +160,15 @@ static bool terminate = false;
  */
 static bool ready = false;
 
+/**
+ * @brief Device hostname, can be an IP or some other designator 
+ */
 static char hostname[20] = "-";
+
+/**
+ * @brief Log format
+ */
+static RLOG_FORMAT format = RLOG_RFC3164;
 
 #if RLOG_DLOG_ENABLE
 /**
@@ -315,7 +322,7 @@ int queue_get(char* msg)
     msg_queue.cnt--;
     os_mutex_unlock(queue_lock);
 
-    make_log_string(hostname, msg, &log);
+    make_log_string(format, hostname, msg, &log);
     return strlen(msg);
 }
 
@@ -389,6 +396,25 @@ void rlogf(RLOG_TYPE type, const char* format, ...)
     va_end(args);
     os_event_set(wakeup_events, EVENT_NEW_MSG);
 }
+
+bool rlog_set_format(RLOG_FORMAT fmt)
+{
+    if( ready ) 
+    {
+        DBG_PRINTF("[RLOG] rlog server already running \n");
+        return false;
+    }
+
+    if ( fmt >= RLOG_NO_FORMAT )
+    {   
+        DBG_PRINTF("[RLOG] Invalid format! \n"); 
+        return false;
+    }
+
+    format = fmt;
+    return true;
+}
+
 
 bool rlog_set_hostname(const char* name)
 {

@@ -31,8 +31,8 @@
 #include "lwip/sys.h"
 
 #include "../interfaces.h"
-#include "../../os/osal.h"
-#include "../../../rlog.h"
+#include "../../port/os/osal.h"
+#include "../../rlog.h"
 
 #ifndef _RLOG_TCPIP_DBG_
     #define _RLOG_TCPIP_DBG_ 1
@@ -65,7 +65,7 @@
  * @param me Not used.
  * @return true if TCP socket is ready and listening
  */
-bool rfc6587_init(void* me);
+bool tcpcli_init(void* me);
 
 /**
  * @brief Check if at least one client has connected and test all connections. 
@@ -74,7 +74,7 @@ bool rfc6587_init(void* me);
  * @param me Not used.
  * @return true if there is at least one client connected.
  */
-bool rfc6587_poll(void* me);
+bool tcpcli_poll(void* me);
 
 /**
  * @brief Send data to all connected TCP clients
@@ -84,12 +84,12 @@ bool rfc6587_poll(void* me);
  * @param len Length of the message in bytes
  * @return true if was able to send a message to at least one client 
  */
-bool rfc6587_send(void* me, const void* buf, int len);
+bool tcpcli_send(void* me, const void* buf, int len);
 
-rlog_ifc_t rlog_rfc6587 = {
-    .init       = &rfc6587_init,
-    .poll       = &rfc6587_poll,
-    .send       = &rfc6587_send,
+rlog_ifc_t rlog_tcpcli_ifc = {
+    .init       = &tcpcli_init,
+    .poll       = &tcpcli_poll,
+    .send       = &tcpcli_send,
     .deinit     = NULL,
     .ctx        = NULL,
 };
@@ -97,30 +97,29 @@ rlog_ifc_t rlog_rfc6587 = {
 static int my_socket = -1;
 static char server_ip[] = "255.255.255.255";
 static struct sockaddr_in sock_addr = { 0 };
-static uint16_t rfc6587_port = 1514;
+static uint16_t tcpcli_port = 1514;
 static bool connected = false;
-static char tx[160] = "";
 
 /**
  * @brief server thread handle
  */
 static os_thread_t* thread_handle;
-static void rfc6587_thread(void* arg);
+static void tcpcli_thread(void* arg);
 static bool configured = false;
 static bool initialized = false;
 
-bool rlog_rfc6587_config(const char* ip, unsigned int port)
+bool rlog_tcpcli_config(const char* ip, unsigned int port)
 {
     if( initialized )
         return false;
 
     if( port ) {
-        rfc6587_port = port;
+        tcpcli_port = port;
     }
     
     if( ip == NULL ) 
     {
-        DBG_PRINTF("[RLOG] rlog_rfc6587_config:: invalid IP!\n");
+        DBG_PRINTF("[RLOG] rlog_tcpcli_config:: invalid IP!\n");
         return false;      
     }
 
@@ -129,7 +128,7 @@ bool rlog_rfc6587_config(const char* ip, unsigned int port)
     return true;
 }
 
-bool rfc6587_init(void* me)
+bool tcpcli_init(void* me)
 {		
     if( initialized )
         return true;
@@ -139,9 +138,9 @@ bool rfc6587_init(void* me)
 
     sock_addr.sin_family = AF_INET;
     sock_addr.sin_addr.s_addr = inet_addr(server_ip);
-    sock_addr.sin_port = htons( rfc6587_port );
+    sock_addr.sin_port = htons( tcpcli_port );
 
-    thread_handle = os_thread_create("rfc6587", rfc6587_thread, NULL, 2048, 8);
+    thread_handle = os_thread_create("tcpcli", tcpcli_thread, NULL, 2048, 8);
     if( thread_handle == NULL ) {
         DBG_PRINTF("[RLOG] rlog_init failed to create thread\n");
         return false;
@@ -151,7 +150,7 @@ bool rfc6587_init(void* me)
     return true;
 }
 
-bool rfc6587_check_socket(int sockfd) 
+bool tcpcli_check_socket(int sockfd) 
 { 
     char sock_buf;
     if( recv(sockfd, &sock_buf, sizeof(char), MSG_PEEK | MSG_DONTWAIT) == 0 ) {
@@ -167,7 +166,7 @@ bool rfc6587_check_socket(int sockfd)
     return true; 
 } 
 
-bool rfc6587_poll(void* me)
+bool tcpcli_poll(void* me)
 {	
     if( my_socket < 0 )
         return false;
@@ -175,13 +174,12 @@ bool rfc6587_poll(void* me)
     return connected;
 }
 
-bool rfc6587_send(void* me, const void* buf, int len)
+bool tcpcli_send(void* me, const void* buf, int len)
 {
     if( my_socket < 0 )
         return false;
 
-    int nbytes = snprintf(tx, sizeof(tx), "%s\r\n", (const char*)buf);
-    if( send(my_socket, tx, nbytes, MSG_DONTWAIT) < 0 )
+    if( send(my_socket, buf, len, MSG_DONTWAIT) < 0 )
     {
         DBG_PRINTF("[RLOG] rlog_tcp_send::send() failed %d\n", errno);
         rlogf(RLOG_INFO, "[RLOG] Lost connection to %s", server_ip);
@@ -195,13 +193,13 @@ bool rfc6587_send(void* me, const void* buf, int len)
 }
 
 static
-void rfc6587_thread(void* arg)
+void tcpcli_thread(void* arg)
 {                
     while( 1 )
     {         
         if( connected )
         {
-            if( !rfc6587_check_socket(my_socket) )
+            if( !tcpcli_check_socket(my_socket) )
             {
                 rlogf(RLOG_INFO, "[RLOG] Lost connection to %s", server_ip);
                 connected = false;
@@ -214,7 +212,7 @@ void rfc6587_thread(void* arg)
 
             if( my_socket == -1 ) 
             {
-                DBG_PRINTF("[RLOG] rfc6587_init::socket() failed %d\n", errno);
+                DBG_PRINTF("[RLOG] tcpcli_init::socket() failed %d\n", errno);
             }
             else
             {
