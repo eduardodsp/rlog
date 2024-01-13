@@ -3,8 +3,8 @@
 #include <string.h>
 
 #include "../interfaces.h"
-#include "../../os/osal.h"
-#include "../../../rlog.h"
+#include "../../port/os/osal.h"
+#include "../../rlog.h"
 
 bool rlog_stdout_init(void* me);
 bool rlog_stdout_poll(void* me);

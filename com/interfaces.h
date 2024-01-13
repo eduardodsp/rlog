@@ -2,6 +2,9 @@
 #define _PORT_COM_INTERFACES_H_
 
 #include <stdbool.h>
+#include "udp/udpip.h"
+#include "tcp/client.h"
+#include "tcp/server.h"
 
 /**
  * @brief Set of callbacks to enable communication between client and server.
@@ -59,10 +62,17 @@ typedef struct rlog_ifc_s
 }rlog_ifc_t;
 
 /**
- * @brief Default TCP/IP interface implementation
+ * @brief Default TCP Server interface
  */
-extern rlog_ifc_t rlog_default_tcpip_ifc;
-#define RLOG_DEFAULT_TCPIP rlog_default_tcpip_ifc
+extern rlog_ifc_t rlog_tcp_server_ifc;
+#define RLOG_TCP_SERVER rlog_tcp_server_ifc
+
+/**
+ * @brief Default TCP Client interface
+ * 
+ */
+extern rlog_ifc_t rlog_tcpcli_ifc;
+#define RLOG_TCP_CLIENT rlog_tcpcli_ifc
 
 /**
  * @brief STDOUT interface, use this if connected to the device
@@ -70,6 +80,12 @@ extern rlog_ifc_t rlog_default_tcpip_ifc;
  */
 extern rlog_ifc_t rlog_stdout;
 #define RLOG_STDOUT rlog_stdout
+
+/**
+ * @brief Default UDP interface
+ */
+extern rlog_ifc_t rlog_udp_ifc;
+#define RLOG_DEFAULT_UDP rlog_udp_ifc
  
 /*
 TODO: Add more interfaces..

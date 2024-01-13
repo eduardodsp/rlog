@@ -26,20 +26,14 @@
 #include <stdint.h>
 #include <stdarg.h>
 
-#include "port/com/interfaces.h"
+#include "com/interfaces.h"
+#include "format/format.h"
 
 /**
  * @brief Current RLOG version.
  * This follows the classic semantic versioning format
  */
 #define RLOG_VERSION "1.0.0"
-
-/**
- * @brief User defined maximum size of log messages.
- */
-#ifndef RLOG_MAX_SIZE_CHAR
-    #define RLOG_MAX_SIZE_CHAR  80
-#endif
 
 /**
  * @brief Enable (1) or Disable (0) timestamping of messages.
@@ -52,14 +46,6 @@
     #define RLOG_DLOG_ENABLE 1
 #endif
 
-typedef enum
-{
-    RLOG_INFO = 0,
-    RLOG_WARNING,
-    RLOG_ERROR, 
-
-}RLOG_TYPE;
-
 /**
  * @brief Initializes rlog server.
  * @param filepath Fullpath for backup file, including filename. Only used if
@@ -70,6 +56,17 @@ typedef enum
  * @return false if failed
  */
 bool rlog_init(const char* filepath, unsigned int size);
+
+/**
+ * @brief Set device hostname
+ * 
+ * @param name Pointer to c string. 
+ * The string must have a maximum size of 20 characters including termination and
+ * MUST NOT have spaces!
+ * @return true Succesfully set the device name
+ * @return false Failed to set device name
+ */
+bool rlog_set_hostname(const char* name);
 
 /**
  * @brief Kills the server and de-initialize all installed interfaces;
@@ -104,5 +101,14 @@ void rlogf(RLOG_TYPE type, const char* format, ...);
  * @return false If failed to install the interface.
  */
 bool rlog_install_interface(rlog_ifc_t interface);
+
+/**
+ * @brief Set the message format
+ * 
+ * @param fmt Message format see \ref RLOG_FORMAT
+ * @return true If succesfully set the format
+ * @return false If failed to set the format
+ */
+bool rlog_set_format(RLOG_FORMAT fmt);
 
 #endif //_RLOG_H_

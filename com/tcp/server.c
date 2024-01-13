@@ -1,7 +1,7 @@
 /**
- * @file tcp.c
+ * @file server.c
  * @author edsp
- * @brief Default TCP/IP IP APIs for client/server communications. 
+ * @brief Default TCP server interface implementation. 
  * This implementation support multiple clients however it does not 
  * support multilpe instances of the interface.
  * @version 1.0.0
@@ -31,8 +31,8 @@
 #include "lwip/sys.h"
 
 #include "../interfaces.h"
-#include "../../os/osal.h"
-#include "../../../rlog.h"
+#include "../../port/os/osal.h"
+#include "../../rlog.h"
 
 #ifndef _RLOG_TCPIP_DBG_
     #define _RLOG_TCPIP_DBG_ 1
@@ -43,13 +43,6 @@
 #define DBG_PRINTF(...) printf(__VA_ARGS__)
 #else
 #define DBG_PRINTF(...)
-#endif
-
-/**
- * @brief RLOG protocol TCP Port 
- */
-#ifndef RLOG_DEFAULT_TCPIP_PORT
-    #define RLOG_DEFAULT_TCPIP_PORT  8888
 #endif
 
 /**
@@ -86,7 +79,7 @@ bool rlog_tcp_poll(void* me);
  */
 bool rlog_tcp_send(void* me, const void* buf, int len);
 
-rlog_ifc_t rlog_default_tcpip_ifc = {
+rlog_ifc_t rlog_tcp_server_ifc = {
     .init       = &rlog_tcp_init,
     .poll       = &rlog_tcp_poll,
     .send       = &rlog_tcp_send,
@@ -103,12 +96,30 @@ typedef struct rlog_tcp_cli_t
 }rlog_tcp_cli_t;
 
 static int server_socket = -1;
+static uint16_t server_port = RLOG_TCP_SERVER_PORT;
 static struct sockaddr_in sock_addr = { 0 };
 static rlog_tcp_cli_t cli[RLOG_TCPIP_MAX_CLI];
+static bool initialized = false;
+
+bool rlog_tcp_server_config(unsigned int port)
+{
+    if( initialized )
+        return false;
+
+    if( port ) {
+        server_port = port;
+    }
+    
+    return true;
+}
 
 
 bool rlog_tcp_init(void* me)
 {	
+    if( initialized ) {
+        return true;
+    }
+    
 	for (int i=0; i < RLOG_TCPIP_MAX_CLI; i++)
 	{			
 		cli[i].socket = -1;
@@ -136,7 +147,7 @@ bool rlog_tcp_init(void* me)
 
     sock_addr.sin_family = AF_INET;
     sock_addr.sin_addr.s_addr = INADDR_ANY;
-    sock_addr.sin_port = htons( RLOG_DEFAULT_TCPIP_PORT );
+    sock_addr.sin_port = htons( server_port );
 
     int flags = fcntl(server_socket, F_GETFL, 0);
     fcntl(server_socket, F_SETFL, flags | O_NONBLOCK);
@@ -157,6 +168,7 @@ bool rlog_tcp_init(void* me)
         return false;
     }
 
+    initialized = true;
     return true;
 }
 
