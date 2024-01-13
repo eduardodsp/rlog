@@ -18,7 +18,7 @@ int make_rfc3164_string(char* hostname, char* str, log_t* log)
     strftime(date, sizeof(date), "%b %d %H:%M:%S", timeinfo);
 #endif
 
-    nchar = snprintf(str, MSG_MAX_SIZE_CHAR,"<%d>%s %s app: %s\r\n", log->pri, date, hostname, log->msg);
+    nchar = snprintf(str, MSG_MAX_SIZE_CHAR,"<%d>%s %s -: %s\r\n", log->pri, date, hostname, log->msg);
    
     if( nchar < 0 || nchar > MSG_MAX_SIZE_CHAR )
         return -1;
