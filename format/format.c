@@ -7,18 +7,22 @@
 #include "rlog.h"
 #include "format.h"
 
+static char date[80] = { 0 };
+
 int make_rfc3164_string(char* hostname, char* str, log_t* log)
 {
     int nchar = 0;
-    char date[80] = { 0 };
 
 #if RLOG_TIMESTAMP_ENABLE    
     struct tm * timeinfo;
     timeinfo = localtime ( &log->timestamp );
     strftime(date, sizeof(date), "%b %d %H:%M:%S", timeinfo);
 #endif
-
-    nchar = snprintf(str, MSG_MAX_SIZE_CHAR,"<%d>%s %s -: %s\r\n", log->pri, date, hostname, log->msg);
+    if( log->proc ) {
+        nchar = snprintf(str, MSG_MAX_SIZE_CHAR,"<%d>%s %s %s: %s\r\n", log->pri, date, hostname, log->proc, log->msg);
+    } else {
+        nchar = snprintf(str, MSG_MAX_SIZE_CHAR,"<%d>%s %s -: %s\r\n", log->pri, date, hostname, log->msg);
+    }
    
     if( nchar < 0 || nchar > MSG_MAX_SIZE_CHAR )
         return -1;
@@ -29,16 +33,17 @@ int make_rfc3164_string(char* hostname, char* str, log_t* log)
 int make_rfc5424_log(char* hostname, char* str, log_t* log)
 {
     int nchar = 0;
-    char date[80] = { 0 };
 
 #if RLOG_TIMESTAMP_ENABLE    
     struct tm * timeinfo;
     timeinfo = localtime ( &log->timestamp );
-
     strftime(date, sizeof(date), "%Y-%m-%dT%H:%M:%S", timeinfo);
 #endif
-
-    nchar = snprintf(str, MSG_MAX_SIZE_CHAR,"<%d>1 %s %s - - - %s\r\n", log->pri, date, hostname, log->msg);
+    if( log->proc ) {
+        nchar = snprintf(str, MSG_MAX_SIZE_CHAR,"<%d>1 %s %s %s - - %s\r\n", log->pri, date, hostname, log->proc, log->msg);
+    } else {
+        nchar = snprintf(str, MSG_MAX_SIZE_CHAR,"<%d>1 %s %s - - - %s\r\n", log->pri, date, hostname, log->msg);
+    }
    
     if( nchar < 0 || nchar > MSG_MAX_SIZE_CHAR )
         return -1;

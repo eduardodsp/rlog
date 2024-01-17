@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <sys/time.h>
+#include "../port/os/osal.h"
 
 /**
  * @brief User defined maximum size of log messages.
@@ -38,7 +39,8 @@ typedef enum
 typedef struct log_t
 {
     time_t timestamp;
-    uint8_t pri;    
+    uint8_t pri;
+    char* proc;  
     char msg[RLOG_MAX_SIZE_CHAR];
 }log_t;
 
