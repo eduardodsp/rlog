@@ -23,6 +23,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -61,7 +62,7 @@ os_thread_t* os_thread_create(
     if (xTaskCreate ((TaskFunction_t)task, NULL, stacksize, arg, prio, &hTask) != 1)
     	return NULL;
 #else
-    if (xTaskCreate((TaskFunction_t)task, NULL, stack, arg, prio, &hTask) != 1)
+    if (xTaskCreate((TaskFunction_t)task, name, stack, arg, prio, &hTask) != 1)
     	return NULL;
 #endif
 
@@ -71,6 +72,16 @@ os_thread_t* os_thread_create(
 void os_thread_destroy(os_thread_t* id)
 {
     vTaskDelete( id );
+}
+
+char* os_thread_get_name(os_thread_t* id)
+{
+    return pcTaskGetName((TaskHandle_t)id);
+}
+
+os_thread_t* os_get_active_thread(void)
+{
+    return (os_thread_t*) xTaskGetCurrentTaskHandle();
 }
 
 os_mutex_t * os_mutex_create()

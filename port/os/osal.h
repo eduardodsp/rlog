@@ -67,6 +67,22 @@ os_thread_t* os_thread_create(
 void os_thread_destroy(os_thread_t* id);
 
 /**
+ * @brief Return the handle to the active thread.
+ * @return Handle to the active thread
+ */
+os_thread_t* os_get_active_thread(void);
+
+/**
+ * @brief Get the thread name.
+ * 
+ * @param id Thread handle. If set to NULL it shall return the name of the thread currently 
+ * executing
+ * @return A pointer to the thread name, which is a standard NULL terminated C string,
+ * or a NULL if thread name not found. 
+ */
+char* os_thread_get_name(os_thread_t* id);
+
+/**
  * @brief Create waitable event
  * @return Pointer to event handle
  */
@@ -134,7 +150,6 @@ void os_timer_stop(os_timer_t * timer);
  * @param timer Timer handle
  */
 void os_timer_destroy(os_timer_t * timer);
-
 
 /**
  * @brief Create a mutual exclusion semaphore (mutex)
