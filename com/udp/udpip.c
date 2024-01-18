@@ -23,6 +23,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <netdb.h>
 
 #include "udpip.h"
 
@@ -82,24 +83,24 @@ rlog_ifc_t rlog_udp_ifc = {
 
 static int my_socket = -1;
 static struct sockaddr_in sock_addr = { 0 };
-static char server_ip[] = "255.255.255.255";
+static char server_addr[] = "255.255.255.255";
 static uint16_t udp_port = RLOG_UDP_DEFAULT_PORT;
 static bool configured = false;
 static bool initialized = false;
 
-bool rlog_udp_config(const char* ip, unsigned int port)
+bool rlog_udp_config(const char* addr, unsigned int port)
 { 
     if( port ) {
         udp_port = port;
     }
     
-    if( ip == NULL ) 
+    if( addr == NULL ) 
     {
-        DBG_PRINTF("[RLOG] rlog_udp_config:: invalid IP!\n");
+        DBG_PRINTF("[RLOG] rlog_udp_config:: invalid server address!\n");
         return false;      
     }
 
-    strncpy(server_ip, ip, sizeof(server_ip));
+    strncpy(server_addr, addr, sizeof(server_addr));
     configured = true;
     return true;
 }
@@ -121,8 +122,15 @@ bool rlog_udp_init(void* me)
         return false;
     }
 
+    struct hostent *hp;    
+    hp = gethostbyname(server_addr);
+    if(hp == NULL) {
+        DBG_PRINTF("[RLOG] tcpcli_init::gethostbyname failed, error: %d \n", h_errno);
+        return false;
+    }
+
     sock_addr.sin_family = AF_INET;
-    sock_addr.sin_addr.s_addr = inet_addr(server_ip);
+    sock_addr.sin_addr.s_addr = *(u_long *) hp->h_addr_list[0];
     sock_addr.sin_port = htons( udp_port );
 
     initialized = true;
