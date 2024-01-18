@@ -62,8 +62,8 @@ os_thread_t* os_thread_create(
     if (xTaskCreate ((TaskFunction_t)task, NULL, stacksize, arg, prio, &hTask) != 1)
     	return NULL;
 #else
-    if (xTaskCreate((TaskFunction_t)task, name, stack, arg, prio, &hTask) != 1)
-    	return NULL;
+    xTaskCreate((TaskFunction_t)task, name, stack, arg, prio, &hTask);
+    OS_ASSERT(hTask != NULL);
 #endif
 
     return (os_thread_t*)hTask;

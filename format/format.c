@@ -19,6 +19,13 @@ int make_rfc3164_string(char* hostname, char* str, log_t* log)
     strftime(date, sizeof(date), "%b %d %H:%M:%S", timeinfo);
 #endif
     if( log->proc ) {
+        
+        char * pcTmp  = log->proc;
+        while (*pcTmp) {
+            if (*pcTmp == ' ') *pcTmp = '_';
+            ++pcTmp;
+        }
+
         nchar = snprintf(str, MSG_MAX_SIZE_CHAR,"<%d>%s %s %s: %s\r\n", log->pri, date, hostname, log->proc, log->msg);
     } else {
         nchar = snprintf(str, MSG_MAX_SIZE_CHAR,"<%d>%s %s -: %s\r\n", log->pri, date, hostname, log->msg);
@@ -40,6 +47,13 @@ int make_rfc5424_log(char* hostname, char* str, log_t* log)
     strftime(date, sizeof(date), "%Y-%m-%dT%H:%M:%S", timeinfo);
 #endif
     if( log->proc ) {
+
+        char * pcTmp  = log->proc;
+        while (*pcTmp) {
+            if (*pcTmp == ' ') *pcTmp = '_';
+            ++pcTmp;
+        }
+
         nchar = snprintf(str, MSG_MAX_SIZE_CHAR,"<%d>1 %s %s %s - - %s\r\n", log->pri, date, hostname, log->proc, log->msg);
     } else {
         nchar = snprintf(str, MSG_MAX_SIZE_CHAR,"<%d>1 %s %s - - - %s\r\n", log->pri, date, hostname, log->msg);
