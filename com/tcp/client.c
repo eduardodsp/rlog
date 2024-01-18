@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <netdb.h>
 #include "lwip/err.h"
 #include "lwip/sockets.h"
 #include "lwip/sys.h"
@@ -95,7 +96,7 @@ rlog_ifc_t rlog_tcpcli_ifc = {
 };
 
 static int my_socket = -1;
-static char server_ip[] = "255.255.255.255";
+static char server_addr[] = "255.255.255.255";
 static struct sockaddr_in sock_addr = { 0 };
 static uint16_t tcpcli_port = 1514;
 static bool connected = false;
@@ -108,7 +109,7 @@ static void tcpcli_thread(void* arg);
 static bool configured = false;
 static bool initialized = false;
 
-bool rlog_tcpcli_config(const char* ip, unsigned int port)
+bool rlog_tcpcli_config(const char* addr, unsigned int port)
 {
     if( initialized )
         return false;
@@ -117,13 +118,13 @@ bool rlog_tcpcli_config(const char* ip, unsigned int port)
         tcpcli_port = port;
     }
     
-    if( ip == NULL ) 
+    if( addr == NULL ) 
     {
-        DBG_PRINTF("[RLOG] rlog_tcpcli_config:: invalid IP!\n");
+        DBG_PRINTF("[RLOG] rlog_tcpcli_config:: invalid server address!\n");
         return false;      
     }
 
-    strncpy(server_ip, ip, sizeof(server_ip));
+    strncpy(server_addr, addr, sizeof(server_addr));
     configured = true;
     return true;
 }
@@ -136,8 +137,15 @@ bool tcpcli_init(void* me)
     if( !configured )
         return false;
 
+    struct hostent *hp;    
+    hp = gethostbyname(server_addr);
+    if(hp == NULL) {
+        DBG_PRINTF("[RLOG] tcpcli_init::gethostbyname failed, error: %d \n", h_errno);
+        return false;
+    }
+
     sock_addr.sin_family = AF_INET;
-    sock_addr.sin_addr.s_addr = inet_addr(server_ip);
+    sock_addr.sin_addr.s_addr = *(u_long *) hp->h_addr_list[0];
     sock_addr.sin_port = htons( tcpcli_port );
 
     thread_handle = os_thread_create("tcpcli", tcpcli_thread, NULL, 2048, 8);
@@ -182,7 +190,7 @@ bool tcpcli_send(void* me, const void* buf, int len)
     if( send(my_socket, buf, len, MSG_DONTWAIT) < 0 )
     {
         DBG_PRINTF("[RLOG] rlog_tcp_send::send() failed %d\n", errno);
-        rlogf(RLOG_INFO, "[RLOG] Lost connection to %s", server_ip);
+        rlogf(RLOG_INFO, "[RLOG] Lost connection to %s", server_addr);
         close(my_socket);
         my_socket = -1;
         connected = false;
@@ -201,7 +209,7 @@ void tcpcli_thread(void* arg)
         {
             if( !tcpcli_check_socket(my_socket) )
             {
-                rlogf(RLOG_INFO, "[RLOG] Lost connection to %s", server_ip);
+                rlogf(RLOG_INFO, "[RLOG] Lost connection to %s", server_addr);
                 connected = false;
             }
         }
@@ -221,7 +229,7 @@ void tcpcli_thread(void* arg)
                     connected = false;
                     os_sleep_us(1000 * 1000);
                 } else {
-                    rlogf(RLOG_INFO, "[RLOG] New connection to %s", server_ip);
+                    rlogf(RLOG_INFO, "[RLOG] New connection to %s", server_addr);
                     connected = true;
                 }
             }

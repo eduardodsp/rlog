@@ -27,14 +27,7 @@ I wrote this to help me monitor the status of devices on my other projects. Some
 ## How To Use
 ```
     #include "rlog.h"
-    
-    // Initialize target HW...
-    
-    // Configure and install TCP-Client interface
-    // here we need to set the Syslog Server IP and Port number
-    rlog_tcpcli_config("192.168.178.174", 514);
-    rlog_install_interface(RLOG_TCP_CLIENT);
-      
+              
     // Set my device name
     rlog_set_hostname("my_esp32_devkit");    
 
@@ -42,10 +35,26 @@ I wrote this to help me monitor the status of devices on my other projects. Some
     rlog_set_format(RLOG_RFC3164);
     
     // Initialize RLOG server and the backup file
-    if( rlog_init("/spiffs/rlog.log", 40) ) {
-        // Log an INFO message
-        rlog(RLOG_INFO,"HELLO WORLD!");
+    if( !rlog_init("/spiffs/rlog.log", 40) ) {
+        //error!
     }
+
+    // From this point onwards you can already start logging
+    // even if there is no communication interface installed.
+    // In this case rlog will just store it in the backup file
+
+    // Log an INFO message
+    rlog(RLOG_INFO,"HELLO WORLD!");
+
+    // At any moment we can configure and install a new interface
+    rlog_tcpcli_config("192.168.178.174", 514);
+    rlog_install_interface(RLOG_TCP_CLIENT);
+
+    // Now all logs will be dumped to the interface
+    // as soon as it's available. In the case of this example, all 
+    // logs will be dumped as soon as the tcp client connects to the server
+    // at 192.168.178.174. Note: you can use an URL too!
+
 ```
 ## Portability layer
 

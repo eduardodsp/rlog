@@ -14,7 +14,8 @@
 typedef struct rlog_ifc_s
 {
     /**
-     * @brief Function pointer to intialize communication interface
+     * @brief Function pointer to intialize communication interface. This can be a blocking function
+     * if needs be.
      * 
      * @param arg Interface context data
      * @return true if succesfully initialzied the communication interface. 

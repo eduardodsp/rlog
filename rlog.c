@@ -146,6 +146,11 @@ static os_thread_t* thread_handle;
 static os_mutex_t*  queue_lock = NULL;
 
 /**
+ * @brief Mutex to control access to the comms interface list
+ */
+static os_mutex_t* coms_lock = NULL;
+
+/**
  * @brief Set of events to wake the main thread
  */
 static os_event_t* wakeup_events;
@@ -158,7 +163,7 @@ static bool terminate = false;
 /**
  * @brief Indicate the server has already been intialized
  */
-static bool ready = false;
+static bool initialized = false;
 
 /**
  * @brief Device hostname, can be an IP or some other designator 
@@ -331,20 +336,16 @@ int queue_get(char* msg)
 
 bool rlog_init(const char* filepath, unsigned int size)
 {
-    if( ready ) 
-    {
-        DBG_PRINTF("[RLOG] rlog server already running \n");
-        return false;
-    }
+    OS_ASSERT(initialized == false);
 
     queue_init();
 
-    queue_lock = os_mutex_create();
-    if( queue_lock == NULL ) {
-        DBG_PRINTF("[RLOG] rlog_init failed to create mutex\n");
-        goto INIT_FAIL;
+    // this lock may be created in rlog_install_interface, so check first
+    if(coms_lock == NULL) {
+        coms_lock = os_mutex_create();
     }
 
+    queue_lock = os_mutex_create();
     wakeup_events = os_event_create();        
 
 #if RLOG_DLOG_ENABLE
@@ -356,12 +357,8 @@ bool rlog_init(const char* filepath, unsigned int size)
 #endif
 
     thread_handle = os_thread_create("rlog", server_thread, NULL, RLOG_STACK_SIZE, RLOG_TASK_PRIO);
-    if( thread_handle == NULL ) {
-        DBG_PRINTF("[RLOG] rlog_init failed to create thread\n");
-        goto INIT_FAIL;
-    }
 
-    ready = true;
+    initialized = true;
     os_sleep_us(1000);
     return true;
 
@@ -405,7 +402,7 @@ void rlogf(RLOG_TYPE type, const char* format, ...)
 
 bool rlog_set_format(RLOG_FORMAT fmt)
 {
-    if( ready ) 
+    if( initialized ) 
     {
         DBG_PRINTF("[RLOG] rlog server already running \n");
         return false;
@@ -424,7 +421,7 @@ bool rlog_set_format(RLOG_FORMAT fmt)
 
 bool rlog_set_hostname(const char* name)
 {
-    if( ready ) 
+    if( initialized ) 
     {
         DBG_PRINTF("[RLOG] rlog server already running \n");
         return false;
@@ -433,17 +430,18 @@ bool rlog_set_hostname(const char* name)
     if( !name )
         return false;
         
-    snprintf(hostname, sizeof(hostname), name);    
+    snprintf(hostname, sizeof(hostname), name); 
+    char * pcTmp  = hostname;
+    while (*pcTmp) {
+        if (*pcTmp == ' ') *pcTmp = '_';
+        ++pcTmp;
+    }
+   
     return true;
 }
 
 bool rlog_install_interface( rlog_ifc_t interface )
 {
-    if( ready ) 
-    {
-        DBG_PRINTF("[RLOG] rlog server already running \n");
-        return false;
-    }
 
     if(interface.poll == NULL) {
         DBG_PRINTF("[RLOG] rlog_install_interface failed. Invalid parameter\n");
@@ -460,11 +458,6 @@ bool rlog_install_interface( rlog_ifc_t interface )
         return false;
     }
 
-    if( n_ifc >= RLOG_MAX_NUM_IFC ) {
-        DBG_PRINTF("[RLOG] rlog_install_interface failed. Too many interfaces!\n");
-        return false;
-    }
-
     // try to initialize the interface
     if( !interface.init(interface.ctx) )
     {
@@ -472,7 +465,20 @@ bool rlog_install_interface( rlog_ifc_t interface )
         return false;
     }
 
+    if(coms_lock == NULL) {
+        coms_lock = os_mutex_create();
+    }
+
+    os_mutex_lock(coms_lock);
+
+    if( n_ifc >= RLOG_MAX_NUM_IFC ) {
+        DBG_PRINTF("[RLOG] rlog_install_interface failed. Too many interfaces!\n");
+        os_mutex_unlock(coms_lock);
+        return false;
+    }
+
     coms.ifc[n_ifc++] = interface;
+    os_mutex_unlock(coms_lock);
 
     return true;
 }
@@ -480,7 +486,7 @@ bool rlog_install_interface( rlog_ifc_t interface )
 /**
  * @brief Poll all installed interfaces to see which is avaialble.
  * 
- * @return true If at least on interface is ready to receive messages
+ * @return true If at least on interface is initialized to receive messages
  * @return false If no interface can receive messages at the moment.
  */
 bool rlog_poll()
@@ -488,6 +494,7 @@ bool rlog_poll()
     rlog_ifc_t p;
     bool up = false;
 
+    os_mutex_lock(coms_lock);
     for( int i=0; i < n_ifc; i++ )
     {
         p = coms.ifc[i];         
@@ -497,12 +504,13 @@ bool rlog_poll()
             up = coms.up[i];
         }
     }
+    os_mutex_unlock(coms_lock);
 
     return up;   
 }
 
 /**
- * @brief Send message to all interfaces that are ready to receive
+ * @brief Send message to all interfaces that are initialized to receive
  * 
  * @param buf Buffer with message to be sent
  * @param len Size of the message in bytes
@@ -514,6 +522,7 @@ bool rlog_send(const void* buf, int len)
     rlog_ifc_t p;
     unsigned char ok = 0;
 
+    os_mutex_lock(coms_lock);
     for( int i=0; i < n_ifc; i++ )
     {
         if( coms.up[i] )
@@ -524,7 +533,7 @@ bool rlog_send(const void* buf, int len)
                 ok++;            
         }         
     }
-
+    os_mutex_unlock(coms_lock);
     return ( ok > 0 );
 }
 
@@ -535,6 +544,7 @@ void rlog_deinit()
 {
     rlog_ifc_t p;
 
+    os_mutex_lock(coms_lock);
     for( int i=0; i < n_ifc; i++ )
     {
         p = coms.ifc[i]; 
@@ -544,6 +554,7 @@ void rlog_deinit()
         }
 
     }
+    os_mutex_unlock(coms_lock);
 }
 
 #if _RLOG_DBG_   
