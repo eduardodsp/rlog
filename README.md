@@ -28,16 +28,17 @@ I wrote this to help me monitor the status of devices on my other projects. Some
 ```
     #include "rlog.h"
               
-    // Set my device name
-    rlog_set_hostname("my_esp32_devkit");    
+    rlog_cfg_t cfg = {
+        .name = "my esp32 devkit",      // Set my device name
+        .filepath = "/spiffs/rlog.log", // Set backup file
+        .nlogs    = 40,                 // Set max number of logs in backup file
+        .priority = 3,                  // Set service priority
+        .format = RLOG_RFC3164,         // Set log format to the old BSD Syslog format
+        .level = RLOG_WARNING           // Set log level
+    };
 
-    // Set log format to the old BSD Syslog format
-    rlog_set_format(RLOG_RFC3164);
-    
-    // Initialize RLOG server and the backup file
-    if( !rlog_init("/spiffs/rlog.log", 40) ) {
-        //error!
-    }
+    // Configure and start RLOG server
+    assert(rlog_init(cfg));
 
     // From this point onwards you can already start logging
     // even if there is no communication interface installed.
