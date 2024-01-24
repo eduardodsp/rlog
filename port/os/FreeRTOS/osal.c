@@ -76,12 +76,21 @@ void os_thread_destroy(os_thread_t* id)
 
 char* os_thread_get_name(os_thread_t* id)
 {
+#if INCLUDE_xTaskGetCurrentTaskHandle
     return pcTaskGetName((TaskHandle_t)id);
+#else
+    static char empty[] = "";
+    return empty;
+#endif
 }
 
 os_thread_t* os_get_active_thread(void)
 {
+#if INCLUDE_xTaskGetCurrentTaskHandle
     return (os_thread_t*) xTaskGetCurrentTaskHandle();
+#else
+    return NULL;
+#endif
 }
 
 os_mutex_t * os_mutex_create()
