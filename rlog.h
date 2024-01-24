@@ -47,26 +47,56 @@
 #endif
 
 /**
+ * @brief RLOG configuration structure
+ */
+typedef struct rlog_cfg_t
+{
+    /**
+     * @brief Device name. 
+     * The string must have a maximum size of 20 characters including termination and
+     * MUST NOT have spaces!
+     */
+    const char* name;
+
+    /**
+     * @brief Rlog thread priority
+     */
+    unsigned int priority;
+    
+    /**
+     * @brief Fullpath for backup file, including filename. Only used if
+     * RLOG_DLOG_ENABLE is set to 1, else it is ignored
+     */
+    const char* filepath;
+    
+    /**
+     * @brief Size of backup file in number of message entries. Only used if
+     * RLOG_DLOG_ENABLE is set to 1, else it is ignored
+     */    
+    unsigned int nlogs;
+
+    /**
+     * @brief Message format see \ref RLOG_FORMAT. Default value is RLOG_RFC3164
+     */
+    RLOG_FORMAT format;
+
+    /**
+     * @brief Log level. Will only log messages with level equal or smaller than this.
+     * Ex: Setting this to RLOG_DEBUG will enable all levels whereas setting this
+     * to RLOG_CRIT will only allow RLOG_CRIT, RLOG_ALERT and RLOG_EMERGENCY 
+     * messages.
+     */
+    RLOG_LEVEL level;
+
+}rlog_cfg_t;
+
+/**
  * @brief Initializes rlog server.
- * @param filepath Fullpath for backup file, including filename. Only used if
- * RLOG_DLOG_ENABLE is set to 1, else it is ignored
- * @param size Size of backup file in number of message entries. Only used if
- * RLOG_DLOG_ENABLE is set to 1, else it is ignored
+ * @param cfg Configuration options
  * @return true if succesfull initialized the server
  * @return false if failed
  */
-bool rlog_init(const char* filepath, unsigned int size);
-
-/**
- * @brief Set device hostname
- * 
- * @param name Pointer to c string. 
- * The string must have a maximum size of 20 characters including termination and
- * MUST NOT have spaces!
- * @return true Succesfully set the device name
- * @return false Failed to set device name
- */
-bool rlog_set_hostname(const char* name);
+bool rlog_init(rlog_cfg_t cfg);
 
 /**
  * @brief Kills the server and de-initialize all installed interfaces;
@@ -76,20 +106,20 @@ void rlog_kill(void);
 /**
  * @brief Insert a log message into the queue
  * 
- * @param type Message type identifier, see @RLOG_TYPE.
+ * @param type Message type identifier, see @RLOG_LEVEL.
  * @param msg Message to be logged.
  */
-void rlog(RLOG_TYPE type, const char* msg);
+void rlog(RLOG_LEVEL type, const char* msg);
 
 /**
  * @brief Composes a string based on format and variable arguments
  * and insert into the queue
  * 
- * @param type Message type identifier, see @RLOG_TYPE.
+ * @param type Message type identifier, see @RLOG_LEVEL.
  * @param format Message format to be used to create a new message.
  * @param ... format arguments
  */
-void rlogf(RLOG_TYPE type, const char* format, ...);
+void rlogf(RLOG_LEVEL type, const char* format, ...);
 
 /**
  * @brief Install a new interface instance, See \ref rlog_ifc_t for more details.
@@ -101,14 +131,5 @@ void rlogf(RLOG_TYPE type, const char* format, ...);
  * @return false If failed to install the interface.
  */
 bool rlog_install_interface(rlog_ifc_t interface);
-
-/**
- * @brief Set the message format
- * 
- * @param fmt Message format see \ref RLOG_FORMAT
- * @return true If succesfully set the format
- * @return false If failed to set the format
- */
-bool rlog_set_format(RLOG_FORMAT fmt);
 
 #endif //_RLOG_H_

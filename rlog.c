@@ -38,7 +38,7 @@
 #endif
 
 #ifndef _RLOG_PRINTF_
-    #define _RLOG_PRINTF_  1
+    #define _RLOG_PRINTF_  0
 #endif
 
 #if _RLOG_PRINTF_
@@ -52,13 +52,6 @@
  */
 #ifndef RLOG_STACK_SIZE
     #define RLOG_STACK_SIZE 4096
-#endif
-
-/**
- * @brief Rlog thread priority. Default 8
- */
-#ifndef RLOG_TASK_PRIO
-    #define RLOG_TASK_PRIO 8
 #endif
 
 /**
@@ -171,6 +164,11 @@ static bool initialized = false;
 static char hostname[20] = "-";
 
 /**
+ * @brief Log level filter
+ */
+static RLOG_LEVEL filter = RLOG_DEBUG;
+
+/**
  * @brief Log format
  */
 static RLOG_FORMAT log_format = RLOG_RFC3164;
@@ -220,6 +218,17 @@ static int  queue_get(char* msg);
  * RAM.
  */
 static void server_thread(void* arg);
+
+/**
+ * @brief Set device name
+ * 
+ * @param name Pointer to c string. 
+ * The string must have a maximum size of 20 characters including termination and
+ * MUST NOT have spaces!
+ * @return true Succesfully set the device name
+ * @return false Failed to set device name
+ */
+static bool set_device_name(const char* name);
 
 /**
  * @brief Function to copy a string in a safe way. 
@@ -335,36 +344,53 @@ int queue_get(char* msg)
     return strlen(msg);
 }
 
-bool rlog_init(const char* filepath, unsigned int size)
+bool rlog_init(rlog_cfg_t cfg)
 {
     OS_ASSERT(initialized == false);
 
-    queue_init();
+    // set log format
+    if( cfg.format >= RLOG_NO_FORMAT ) {   
+        DBG_PRINTF("[RLOG] Invalid configuration: format! \n"); 
+        return false;
+    }
+    log_format = cfg.format;
+
+    // set log level filter
+    filter = cfg.level;
+
+    // set device name
+    if( !set_device_name(cfg.name) ){
+        DBG_PRINTF("[RLOG] Invalid configuration: name! \n"); 
+        return false;
+    }
+
+    // create kernel objects...
 
     // this lock may be created in rlog_install_interface, so check first
     if(coms_lock == NULL) {
         coms_lock = os_mutex_create();
     }
 
+    queue_init();
     queue_lock = os_mutex_create();
-    wakeup_events = os_event_create();        
-
+    wakeup_events = os_event_create();    
+    
 #if RLOG_DLOG_ENABLE
-    int err = dlog_open(&logger, filepath, size);
+    int err = dlog_open(&logger, cfg.filepath, cfg.nlogs);
     if( err != DLOG_OK ) {
         DBG_PRINTF("[RLOG] rlog_init failed to open dlog. DLOG error %d\n", err);
-        goto INIT_FAIL;            
+        return false;            
     }
 #endif
 
-    thread_handle = os_thread_create("rlog", server_thread, NULL, RLOG_STACK_SIZE, RLOG_TASK_PRIO);
+    if( cfg.priority < 1 )
+        cfg.priority = 1;
+
+    thread_handle = os_thread_create("rlog", server_thread, NULL, RLOG_STACK_SIZE, cfg.priority);
 
     initialized = true;
     os_sleep_us(1000);
     return true;
-
-INIT_FAIL:
-    return false;    
 }
 
 void rlog_kill(void)
@@ -372,59 +398,42 @@ void rlog_kill(void)
     terminate = true;
 }
 
-void rlog(RLOG_TYPE type, const char* msg)
+void rlog(RLOG_LEVEL level, const char* msg)
 {
     log_t log;
+
+    if(level > filter)
+        return;
+
 #if RLOG_TIMESTAMP_ENABLE
     time(&log.timestamp);
 #endif
-    log.pri = 8 + type;
+    log.pri = 8 + level;
     queue_put(log, msg);
     os_event_set(wakeup_events, EVENT_NEW_MSG);
 }
 
-void rlogf(RLOG_TYPE type, const char* format, ...)
+void rlogf(RLOG_LEVEL level, const char* format, ...)
 {
     va_list args;
     log_t log;
 
+    if(level > filter)
+        return;
+
 #if RLOG_TIMESTAMP_ENABLE
     time(&log.timestamp);
 #endif
-    log.pri = 8 + type;
+    log.pri = 8 + level;
     va_start(args, format);
     queue_putf(log, format, args);
     va_end(args);
     os_event_set(wakeup_events, EVENT_NEW_MSG);
 }
 
-bool rlog_set_format(RLOG_FORMAT fmt)
+static
+bool set_device_name(const char* name)
 {
-    if( initialized ) 
-    {
-        DBG_PRINTF("[RLOG] rlog server already running \n");
-        return false;
-    }
-
-    if ( fmt >= RLOG_NO_FORMAT )
-    {   
-        DBG_PRINTF("[RLOG] Invalid format! \n"); 
-        return false;
-    }
-
-    log_format = fmt;
-    return true;
-}
-
-
-bool rlog_set_hostname(const char* name)
-{
-    if( initialized ) 
-    {
-        DBG_PRINTF("[RLOG] rlog server already running \n");
-        return false;
-    }
-
     if( !name )
         return false;
         

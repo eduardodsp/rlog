@@ -34,7 +34,7 @@
 #include "../../rlog.h"
 
 #ifndef _RLOG_TCPIP_DBG_
-    #define _RLOG_TCPIP_DBG_ 1
+    #define _RLOG_TCPIP_DBG_ 0
 #endif
 
 #if _RLOG_TCPIP_DBG_
@@ -46,7 +46,7 @@
 
 
 /**
- * @brief Initialize server TCP socket
+ * @brief Initialize TCP socket
  * 
  * @param me Not used.
  * @return true if TCP socket is ready and listening
@@ -54,21 +54,21 @@
 bool tcpcli_init(void* me);
 
 /**
- * @brief Check if at least one client has connected and test all connections. 
+ * @brief Check if interface has connected to TCP server
  * Non blocking function!
  *
  * @param me Not used.
- * @return true if there is at least one client connected.
+ * @return true if its connected.
  */
 bool tcpcli_poll(void* me);
 
 /**
- * @brief Send data to all connected TCP clients
+ * @brief Send data to server
  * 
  * @param me Not used.
  * @param buf Buffer holding the message to be sent
  * @param len Length of the message in bytes
- * @return true if was able to send a message to at least one client 
+ * @return true if was able to send a message to the server
  */
 bool tcpcli_send(void* me, const void* buf, int len);
 
@@ -135,7 +135,7 @@ bool tcpcli_init(void* me)
 
     thread_handle = os_thread_create("tcpcli", tcpcli_thread, NULL, 2048, 8);
     if( thread_handle == NULL ) {
-        DBG_PRINTF("[RLOG] rlog_init failed to create thread\n");
+        DBG_PRINTF("[RLOG] tcpcli_init failed to create thread\n");
         return false;
     }
 
@@ -174,7 +174,7 @@ bool tcpcli_send(void* me, const void* buf, int len)
 
     if( send(my_socket, buf, len, MSG_DONTWAIT) < 0 )
     {
-        DBG_PRINTF("[RLOG] rlog_tcp_send::send() failed %d\n", errno);
+        DBG_PRINTF("[RLOG] tcpcli_send::send() failed %d\n", errno);
         rlogf(RLOG_INFO, "[RLOG] Lost connection to %s", server_addr);
         close(my_socket);
         my_socket = -1;
@@ -212,7 +212,7 @@ void tcpcli_thread(void* arg)
 
             if( my_socket == -1 ) 
             {
-                DBG_PRINTF("[RLOG] tcpcli_init::socket() failed %d\n", errno);
+                DBG_PRINTF("[RLOG] tcpcli_thread::socket() failed %d\n", errno);
             }
             else
             {

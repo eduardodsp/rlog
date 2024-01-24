@@ -32,7 +32,7 @@
 #include "../../rlog.h"
 
 #ifndef _RLOG_UDPIP_DBG_
-    #define _RLOG_UDPIP_DBG_ 1
+    #define _RLOG_UDPIP_DBG_ 0
 #endif
 
 #if _RLOG_UDPIP_DBG_
@@ -43,29 +43,29 @@
 #endif
 
 /**
- * @brief Initialize server UDP socket
+ * @brief Initialize UDP socket
  * 
  * @param me Not used.
- * @return true if UDP socket is ready and listening
+ * @return true if UDP socket is ready
  */
 bool rlog_udp_init(void* me);
 
 /**
- * @brief Check if at least one client has connected and test all connections. 
+ * @brief Check if interface is ready to send messages
  * Non blocking function!
  *
  * @param me Not used.
- * @return true if there is at least one client connected.
+ * @return true if interface is ready
  */
 bool rlog_udp_poll(void* me);
 
 /**
- * @brief Send data to all connected UDP clients
+ * @brief Send data to UDP server
  * 
  * @param me Not used.
  * @param buf Buffer holding the message to be sent
  * @param len Length of the message in bytes
- * @return true if was able to send a message to at least one client 
+ * @return true if was able to send a message
  */
 bool rlog_udp_send(void* me, const void* buf, int len);
 
@@ -121,7 +121,7 @@ bool rlog_udp_init(void* me)
     struct hostent *hp;    
     hp = gethostbyname(server_addr);
     if(hp == NULL) {
-        DBG_PRINTF("[RLOG] tcpcli_init::gethostbyname failed, error: %d \n", h_errno);
+        DBG_PRINTF("[RLOG] rlog_udp_init::gethostbyname failed, error: %d \n", h_errno);
         return false;
     }
 

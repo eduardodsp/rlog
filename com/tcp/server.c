@@ -33,7 +33,7 @@
 #include "../../rlog.h"
 
 #ifndef _RLOG_TCPIP_DBG_
-    #define _RLOG_TCPIP_DBG_ 1
+    #define _RLOG_TCPIP_DBG_ 0
 #endif
 
 #if _RLOG_TCPIP_DBG_

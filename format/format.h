@@ -34,7 +34,7 @@ typedef enum
     RLOG_INFO       = 6,    // Informational: informational messages
     RLOG_DEBUG      = 7,    // Debug: debug-level message
 
-}RLOG_TYPE;
+}RLOG_LEVEL;
 
 typedef struct log_t
 {
