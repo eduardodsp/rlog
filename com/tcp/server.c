@@ -25,11 +25,9 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 
-#include "lwip/err.h"
-#include "lwip/sockets.h"
-#include "lwip/sys.h"
-
+#include "server.h"
 #include "../interfaces.h"
 #include "../../port/os/osal.h"
 #include "../../rlog.h"

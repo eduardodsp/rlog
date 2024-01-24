@@ -24,13 +24,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <netdb.h>
+#include <sys/socket.h>
 
 #include "udpip.h"
-
-#include "lwip/err.h"
-#include "lwip/sockets.h"
-#include "lwip/sys.h"
-
 #include "../interfaces.h"
 #include "../../port/os/osal.h"
 #include "../../rlog.h"
@@ -83,7 +79,7 @@ rlog_ifc_t rlog_udp_ifc = {
 
 static int my_socket = -1;
 static struct sockaddr_in sock_addr = { 0 };
-static char server_addr[] = "255.255.255.255";
+static char server_addr[100] = {} ;
 static uint16_t udp_port = RLOG_UDP_DEFAULT_PORT;
 static bool configured = false;
 static bool initialized = false;

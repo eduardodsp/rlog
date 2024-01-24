@@ -25,12 +25,10 @@
 
 #include <stdlib.h>
 #include <string.h>
-
 #include <netdb.h>
-#include "lwip/err.h"
-#include "lwip/sockets.h"
-#include "lwip/sys.h"
+#include <sys/socket.h>
 
+#include "client.h"
 #include "../interfaces.h"
 #include "../../port/os/osal.h"
 #include "../../rlog.h"
@@ -46,19 +44,6 @@
 #define DBG_PRINTF(...)
 #endif
 
-/**
- * @brief RLOG protocol TCP Port 
- */
-#ifndef RLOG_DEFAULT_TCPIP_PORT
-    #define RLOG_DEFAULT_TCPIP_PORT  8888
-#endif
-
-/**
- * @brief Max number of TCP clients allowed.
- */
-#ifndef RLOG_TCPIP_MAX_CLI
-    #define RLOG_TCPIP_MAX_CLI 2
-#endif
 
 /**
  * @brief Initialize server TCP socket
@@ -96,7 +81,7 @@ rlog_ifc_t rlog_tcpcli_ifc = {
 };
 
 static int my_socket = -1;
-static char server_addr[] = "255.255.255.255";
+static char server_addr[100] = {} ;
 static struct sockaddr_in sock_addr = { 0 };
 static uint16_t tcpcli_port = 1514;
 static bool connected = false;
@@ -216,6 +201,13 @@ void tcpcli_thread(void* arg)
 
         if( !connected )
         {
+            if( my_socket != -1 )
+            {
+                close(my_socket);
+                my_socket = -1;                    
+                os_sleep_us(1000 * 1000);
+            } 
+            
             my_socket = socket(AF_INET , SOCK_STREAM , 0);
 
             if( my_socket == -1 ) 
@@ -227,7 +219,6 @@ void tcpcli_thread(void* arg)
                 // Send connection request to server
                 if(connect(my_socket, (struct sockaddr*)&sock_addr, sizeof(sock_addr)) < 0){
                     connected = false;
-                    os_sleep_us(1000 * 1000);
                 } else {
                     rlogf(RLOG_INFO, "[RLOG] New connection to %s", server_addr);
                     connected = true;

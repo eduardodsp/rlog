@@ -652,7 +652,7 @@ void send_heartbeat(void)
     heartbeat_timer++;
     if( heartbeat_timer > HEARTBEAT_PERIOD_TICKS ) 
     {
-        rlog(RLOG_INFO,"Heartbeat.. rlog server is still running!");
+        rlog(RLOG_DEBUG,"Heartbeat.. rlog server is still running!");
         heartbeat_timer = 0;
     }
 #endif                
