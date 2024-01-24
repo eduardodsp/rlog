@@ -40,7 +40,7 @@ typedef struct log_t
 {
     time_t timestamp;
     uint8_t pri;
-    char* proc;  
+    char proc[16];  
     char msg[RLOG_MAX_SIZE_CHAR];
 }log_t;
 

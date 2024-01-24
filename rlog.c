@@ -270,7 +270,8 @@ void queue_put(log_t log, const char* msg)
 
     msg_queue.buffer[msg_queue.tail].timestamp = log.timestamp;
     msg_queue.buffer[msg_queue.tail].pri = log.pri;
-    msg_queue.buffer[msg_queue.tail].proc = log.proc;
+    const char* name = os_thread_get_name(NULL);
+    fast_strncpy(msg_queue.buffer[msg_queue.tail].proc, name, sizeof(msg_queue.buffer[msg_queue.tail].proc));
     fast_strncpy(msg_queue.buffer[msg_queue.tail].msg, msg, sizeof(msg_queue.buffer[msg_queue.tail].msg));
 
     if( (msg_queue.tail == msg_queue.head) && full )
@@ -296,7 +297,8 @@ void queue_putf(log_t log, const char* format,  va_list args)
     }
     msg_queue.buffer[msg_queue.tail].timestamp = log.timestamp;
     msg_queue.buffer[msg_queue.tail].pri = log.pri;
-    msg_queue.buffer[msg_queue.tail].proc = log.proc;
+    const char* name = os_thread_get_name(NULL);
+    fast_strncpy(msg_queue.buffer[msg_queue.tail].proc, name, sizeof(msg_queue.buffer[msg_queue.tail].proc));
     vsnprintf(msg_queue.buffer[msg_queue.tail].msg, sizeof(msg_queue.buffer[msg_queue.tail].msg), format, args);
 
     if( (msg_queue.tail == msg_queue.head) && full )
@@ -322,8 +324,7 @@ int queue_get(char* msg)
 
     log.timestamp = msg_queue.buffer[msg_queue.head].timestamp;
     log.pri = msg_queue.buffer[msg_queue.head].pri;
-    log.proc = msg_queue.buffer[msg_queue.tail].proc;
-
+    fast_strncpy(log.proc, msg_queue.buffer[msg_queue.head].proc, sizeof(msg_queue.buffer[msg_queue.head].proc));
     fast_strncpy(log.msg, msg_queue.buffer[msg_queue.head].msg, sizeof(msg_queue.buffer[msg_queue.head].msg));
 
     msg_queue.head = (msg_queue.head + 1) % MSG_QUEUE_SIZE;
@@ -378,7 +379,6 @@ void rlog(RLOG_TYPE type, const char* msg)
     time(&log.timestamp);
 #endif
     log.pri = 8 + type;
-    log.proc = os_thread_get_name(NULL);
     queue_put(log, msg);
     os_event_set(wakeup_events, EVENT_NEW_MSG);
 }
@@ -392,8 +392,6 @@ void rlogf(RLOG_TYPE type, const char* format, ...)
     time(&log.timestamp);
 #endif
     log.pri = 8 + type;
-    log.proc = os_thread_get_name(NULL);
-
     va_start(args, format);
     queue_putf(log, format, args);
     va_end(args);

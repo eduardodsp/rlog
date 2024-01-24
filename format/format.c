@@ -18,8 +18,8 @@ int make_rfc3164_string(char* hostname, char* str, log_t* log)
     timeinfo = localtime ( &log->timestamp );
     strftime(date, sizeof(date), "%b %d %H:%M:%S", timeinfo);
 #endif
-    if( log->proc ) {
-        
+    if( strlen(log->proc) ) {
+
         char * pcTmp  = log->proc;
         while (*pcTmp) {
             if (*pcTmp == ' ') *pcTmp = '_';
@@ -46,7 +46,7 @@ int make_rfc5424_log(char* hostname, char* str, log_t* log)
     timeinfo = localtime ( &log->timestamp );
     strftime(date, sizeof(date), "%Y-%m-%dT%H:%M:%S", timeinfo);
 #endif
-    if( log->proc ) {
+    if( strlen(log->proc ) ) {
 
         char * pcTmp  = log->proc;
         while (*pcTmp) {
@@ -79,4 +79,3 @@ int make_log_string(int format, char* hostname, char* str, log_t* log)
 
     return 0;
 }
-
